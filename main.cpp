@@ -35,8 +35,8 @@ struct State {
   SDL_Renderer* renderer;
 
   State() : is_done{false}, next_entity_idx{0}, screen_w{800}, screen_h{600} {
-    auto hero = entities[next_entity_idx++];
-    hero.x = hero.y = 0;
+    auto& hero = entities[next_entity_idx++];
+    hero.x = hero.y = 200;
     SDL_Init(SDL_INIT_TIMER | SDL_INIT_AUDIO | SDL_INIT_VIDEO | SDL_INIT_EVENTS);
     auto window = SDL_CreateWindow("game",
                                    SDL_WINDOWPOS_UNDEFINED,
@@ -47,15 +47,19 @@ struct State {
     renderer = SDL_CreateRenderer(window,
                                   -1 /* first available */,
                                   SDL_RENDERER_ACCELERATED | SDL_RENDERER_PRESENTVSYNC);
-    auto hero_renderable = renderables[0];
+    auto& hero_renderable = renderables[0];
     auto surf = IMG_Load(get_asset_path("guy.bmp").c_str());
     if(!surf){
       cerr << "Bad img load: " << IMG_GetError() << endl;
       exit(-1);
     }
     hero_renderable.texture = SDL_CreateTextureFromSurface(renderer, surf);
-    hero_renderable.width = surf->w;
-    hero_renderable.height = surf->h;
+    if(!hero_renderable.texture){
+      cerr << "Bad convert to texture: " << SDL_GetError() << endl;
+      exit(-1);
+    }
+    SDL_QueryTexture(hero_renderable.texture, nullptr, nullptr,
+                     (int*)&hero_renderable.width, (int*)&hero_renderable.height);
   }
 };
 
@@ -86,18 +90,13 @@ void read_input(State& world_data) {
           case SDLK_SPACE: {
             world_data.actions.push(Action::SHOOT);
           } break;
-          default: {
-            cerr << "Invalid keypress\n";
-          } break;
         }
       } break;
-      default: {
-        cerr << "Invalid event type\n";
-      }
     }
   }
 }
 
+#define MOVE_DIST 10
 bool update_logic(State& world_data) {
   while(!world_data.actions.empty()){
     auto action = world_data.actions.front();
@@ -105,16 +104,16 @@ bool update_logic(State& world_data) {
     auto& hero = world_data.entities[0];
     switch(action){
       case Action::LEFT: {
-        hero.x = hero.x == 0 ? hero.x : hero.x - 1;
+        hero.x = hero.x - MOVE_DIST;
       } break;
       case Action::RIGHT: {
-        hero.x = hero.x == world_data.screen_w - 1 ? hero.x : hero.x + 1;
+        hero.x = hero.x + MOVE_DIST;
       } break;
       case Action::UP: {
-        hero.y = hero.y == 0 ? hero.x : hero.y - 1;
+        hero.y = hero.y - MOVE_DIST;
       } break;
       case Action::DOWN: {
-        hero.y = hero.y == world_data.screen_h - 1 ? hero.y : hero.y + 1;
+        hero.y = hero.y + MOVE_DIST;
       } break;
       case Action::SHOOT: {
       } break;
@@ -128,8 +127,10 @@ void render(State& world_data) {
   SDL_RenderClear(world_data.renderer);
   for(auto& rend : world_data.renderables){
     auto& entity = world_data.entities[rend.first];
-    SDL_Rect rect{static_cast<int>(entity.x), static_cast<int>(entity.y), static_cast<int>(rend.second.width), static_cast<int>(rend.second.height)};
-    SDL_RenderCopy(world_data.renderer, rend.second.texture, nullptr, nullptr);
+  SDL_Rect rect{
+      static_cast<int>(entity.x),          static_cast<int>(entity.y),
+      static_cast<int>(rend.second.width), static_cast<int>(rend.second.height)};
+    SDL_RenderCopy(world_data.renderer, rend.second.texture, nullptr, &rect);
   }
   SDL_RenderPresent(world_data.renderer);
 }
