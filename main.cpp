@@ -2,6 +2,7 @@
 #include <cmath>
 #include <iostream>
 #include <set>
+#include <unordered_set>
 #include <unordered_map>
 #include "SDL.h"
 #include "SDL_image.h"
@@ -25,22 +26,23 @@ enum class Action {
 };
 
 struct Entity {
-  unsigned x, y;
+  int x, y;
 };
 
 struct Renderable {
-  unsigned display_width, display_height;
-  unsigned sprite_offset_x, sprite_offset_y;
-  unsigned sprite_width, sprite_height;
+  int display_width, display_height;
+  int sprite_offset_x, sprite_offset_y;
+  int sprite_width, sprite_height;
 };
 
 struct State {
   bool is_done;
   set<Action> actions;
-  unsigned next_entity_idx;
-  unordered_map<unsigned, Entity> entities;
-  unsigned screen_w, screen_h;
-  unordered_map<unsigned, Renderable> renderables;
+  int next_entity_idx;
+  unordered_map<int, Entity> entities;
+  int screen_w, screen_h;
+  unordered_map<int, Renderable> renderables;
+  unordered_set<int> mobs;
   SDL_Renderer* renderer;
   SDL_Texture* spritesheet;
 
@@ -125,12 +127,12 @@ void read_input(State& world_data) {
 }
 
 void normalize(float x, float y, float& norm_x, float& norm_y){
-  auto len = x != 0 && y != 0 ? hypot(x,y) : 1;
+  auto len = x != 0 || y != 0 ? hypot(x,y) : 1.0f;
   norm_x = x / len;
   norm_y = y / len;
 }
 
-void make_mob(Renderable& rend){
+void make_mob_rend(Renderable& rend){
   rend.display_width = GUY_WIDTH;
   rend.display_height = GUY_HEIGHT;
   rend.sprite_offset_x = CHAIR_START_PIXEL;
@@ -139,7 +141,8 @@ void make_mob(Renderable& rend){
   rend.sprite_height = CHAIR_HEIGHT;
 }
 
-#define MOVE_DIST 5
+#define PLAYER_SPEED 5
+#define MOB_SPEED 4
 bool update_logic(State& world_data) {
   float vel_x = 0;
   float vel_y = 0;
@@ -164,15 +167,26 @@ bool update_logic(State& world_data) {
         auto& new_mob = world_data.entities[new_mob_idx];
         new_mob.x = new_mob.y = 0;
         auto& new_mob_rend = world_data.renderables[new_mob_idx];
-        make_mob(new_mob_rend);
+        make_mob_rend(new_mob_rend);
+        world_data.mobs.insert(new_mob_idx);
         world_data.actions.erase(Action::SHOOT);
       } break;
     }
   }
   float norm_vel_x = 0, norm_vel_y = 0;
   normalize(vel_x, vel_y, norm_vel_x, norm_vel_y);
-  hero.x += norm_vel_x * MOVE_DIST;
-  hero.y += norm_vel_y * MOVE_DIST;
+  hero.x += norm_vel_x * PLAYER_SPEED;
+  hero.y += norm_vel_y * PLAYER_SPEED;
+
+  // move mobs towards player
+  for(const auto& mob_idx : world_data.mobs){
+    auto& mob = world_data.entities[mob_idx];
+    float mob_vel_x = 0, mob_vel_y = 0;
+    normalize(hero.x - mob.x, hero.y - mob.y, mob_vel_x, mob_vel_y);
+    mob.x += mob_vel_x * MOB_SPEED;
+    mob.y += mob_vel_y * MOB_SPEED;
+  }
+
   return world_data.is_done;
 }
 
@@ -181,12 +195,10 @@ void render(State& world_data) {
   SDL_RenderClear(world_data.renderer);
   for(auto& rend : world_data.renderables){
     auto& entity = world_data.entities[rend.first];
-    SDL_Rect srcrect{
-        (int)rend.second.sprite_offset_x, (int)rend.second.sprite_offset_y,
-        (int)rend.second.sprite_width,    (int)rend.second.sprite_height};
-    SDL_Rect destrect{
-        (int)(entity.x),                  (int)(entity.y),
-        (int)(rend.second.display_width), (int)(rend.second.display_height)};
+    SDL_Rect srcrect{rend.second.sprite_offset_x, rend.second.sprite_offset_y,
+                     rend.second.sprite_width,    rend.second.sprite_height};
+    SDL_Rect destrect{entity.x,                  entity.y,
+                      rend.second.display_width, rend.second.display_height};
     SDL_RenderCopy(world_data.renderer, world_data.spritesheet, &srcrect, &destrect);
   }
   SDL_RenderPresent(world_data.renderer);
