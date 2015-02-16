@@ -28,8 +28,9 @@ struct Entity {
 };
 
 struct Renderable {
-  SDL_Texture* texture;
-  unsigned width, height;
+  unsigned display_width, display_height;
+  unsigned sprite_offset_x, sprite_offset_y;
+  unsigned sprite_width, sprite_height;
 };
 
 struct State {
@@ -40,10 +41,11 @@ struct State {
   unsigned screen_w, screen_h;
   unordered_map<unsigned, Renderable> renderables;
   SDL_Renderer* renderer;
+  SDL_Texture* spritesheet;
 
   State() : is_done{false}, next_entity_idx{0}, screen_w{800}, screen_h{600} {
     auto& hero = entities[next_entity_idx++];
-    hero.x = hero.y = 200;
+    hero.x = hero.y = 0;
     SDL_Init(SDL_INIT_TIMER | SDL_INIT_AUDIO | SDL_INIT_VIDEO | SDL_INIT_EVENTS);
     auto window = SDL_CreateWindow("game",
                                    SDL_WINDOWPOS_UNDEFINED,
@@ -54,19 +56,21 @@ struct State {
     renderer = SDL_CreateRenderer(window,
                                   -1 /* first available */,
                                   SDL_RENDERER_ACCELERATED | SDL_RENDERER_PRESENTVSYNC);
-    auto& hero_renderable = renderables[0];
-    auto surf = IMG_Load(get_asset_path("guy.bmp").c_str());
+    auto surf = IMG_Load(get_asset_path("spritesheet.bmp").c_str());
     if(!surf){
       cerr << "Bad img load: " << IMG_GetError() << endl;
       exit(-1);
     }
-    hero_renderable.texture = SDL_CreateTextureFromSurface(renderer, surf);
-    if(!hero_renderable.texture){
+    spritesheet = SDL_CreateTextureFromSurface(renderer, surf);
+    if(!spritesheet){
       cerr << "Bad convert to texture: " << SDL_GetError() << endl;
       exit(-1);
     }
-    SDL_QueryTexture(hero_renderable.texture, nullptr, nullptr,
-                     (int*)&hero_renderable.width, (int*)&hero_renderable.height);
+    auto& hero_rend = renderables[0];
+    hero_rend.display_width = hero_rend.sprite_width = GUY_WIDTH;
+    hero_rend.display_height = hero_rend.sprite_height = GUY_HEIGHT;
+    hero_rend.sprite_offset_x = GUY_START_PIXEL;
+    hero_rend.sprite_offset_y = 0;
   }
 };
 
@@ -134,10 +138,13 @@ void render(State& world_data) {
   SDL_RenderClear(world_data.renderer);
   for(auto& rend : world_data.renderables){
     auto& entity = world_data.entities[rend.first];
-  SDL_Rect rect{
-      static_cast<int>(entity.x),          static_cast<int>(entity.y),
-      static_cast<int>(rend.second.width), static_cast<int>(rend.second.height)};
-    SDL_RenderCopy(world_data.renderer, rend.second.texture, nullptr, &rect);
+    SDL_Rect srcrect{
+        (int)rend.second.sprite_offset_x, (int)rend.second.sprite_offset_y,
+        (int)rend.second.sprite_width,    (int)rend.second.sprite_height};
+    SDL_Rect destrect{
+        (int)(entity.x),                  (int)(entity.y),
+        (int)(rend.second.display_width), (int)(rend.second.display_height)};
+    SDL_RenderCopy(world_data.renderer, world_data.spritesheet, &srcrect, &destrect);
   }
   SDL_RenderPresent(world_data.renderer);
 }
