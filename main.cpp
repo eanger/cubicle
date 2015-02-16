@@ -1,4 +1,5 @@
 #include <cassert>
+#include <cmath>
 #include <iostream>
 #include <set>
 #include <unordered_map>
@@ -126,27 +127,39 @@ void read_input(State& world_data) {
   }
 }
 
+void normalize(float x, float y, float& norm_x, float& norm_y){
+  auto len = x != 0 && y != 0 ? hypot(x,y) : 1;
+  norm_x = x / len;
+  norm_y = y / len;
+}
+
 #define MOVE_DIST 5
 bool update_logic(State& world_data) {
+  float vel_x = 0;
+  float vel_y = 0;
+  auto& hero = world_data.entities[0];
   for(const auto& action : world_data.actions){
-    auto& hero = world_data.entities[0];
     switch(action){
       case Action::LEFT: {
-        hero.x = hero.x - MOVE_DIST;
+        vel_x = -1;
       } break;
       case Action::RIGHT: {
-        hero.x = hero.x + MOVE_DIST;
+        vel_x = 1;
       } break;
       case Action::UP: {
-        hero.y = hero.y - MOVE_DIST;
+        vel_y = -1;
       } break;
       case Action::DOWN: {
-        hero.y = hero.y + MOVE_DIST;
+        vel_y = 1;
       } break;
       case Action::SHOOT: {
       } break;
     }
   }
+  float norm_vel_x = 0, norm_vel_y = 0;
+  normalize(vel_x, vel_y, norm_vel_x, norm_vel_y);
+  hero.x += norm_vel_x * MOVE_DIST;
+  hero.y += norm_vel_y * MOVE_DIST;
   return world_data.is_done;
 }
 
