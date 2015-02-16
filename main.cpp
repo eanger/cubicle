@@ -1,6 +1,6 @@
 #include <cassert>
 #include <iostream>
-#include <queue>
+#include <set>
 #include <unordered_map>
 #include "SDL.h"
 #include "SDL_image.h"
@@ -35,7 +35,7 @@ struct Renderable {
 
 struct State {
   bool is_done;
-  queue<Action> actions;
+  set<Action> actions;
   unsigned next_entity_idx;
   unordered_map<unsigned, Entity> entities;
   unsigned screen_w, screen_h;
@@ -87,19 +87,38 @@ void read_input(State& world_data) {
             world_data.is_done = true;
           } break;
           case SDLK_LEFT: {
-            world_data.actions.push(Action::LEFT);
+            world_data.actions.insert(Action::LEFT);
           } break;
           case SDLK_RIGHT: {
-            world_data.actions.push(Action::RIGHT);
+            world_data.actions.insert(Action::RIGHT);
           } break;
           case SDLK_UP: {
-            world_data.actions.push(Action::UP);
+            world_data.actions.insert(Action::UP);
           } break;
           case SDLK_DOWN: {
-            world_data.actions.push(Action::DOWN);
+            world_data.actions.insert(Action::DOWN);
           } break;
           case SDLK_SPACE: {
-            world_data.actions.push(Action::SHOOT);
+            world_data.actions.insert(Action::SHOOT);
+          } break;
+        }
+      } break;
+      case SDL_KEYUP: {
+        switch(event.key.keysym.sym){
+          case SDLK_LEFT: {
+            world_data.actions.erase(Action::LEFT);
+          } break;
+          case SDLK_RIGHT: {
+            world_data.actions.erase(Action::RIGHT);
+          } break;
+          case SDLK_UP: {
+            world_data.actions.erase(Action::UP);
+          } break;
+          case SDLK_DOWN: {
+            world_data.actions.erase(Action::DOWN);
+          } break;
+          case SDLK_SPACE: {
+            world_data.actions.erase(Action::SHOOT);
           } break;
         }
       } break;
@@ -107,11 +126,9 @@ void read_input(State& world_data) {
   }
 }
 
-#define MOVE_DIST 10
+#define MOVE_DIST 5
 bool update_logic(State& world_data) {
-  while(!world_data.actions.empty()){
-    auto action = world_data.actions.front();
-    world_data.actions.pop();
+  for(const auto& action : world_data.actions){
     auto& hero = world_data.entities[0];
     switch(action){
       case Action::LEFT: {
