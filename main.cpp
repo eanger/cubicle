@@ -7,6 +7,13 @@
 #include "assets.h"
 using namespace std;
 
+#define GUY_WIDTH 32
+#define GUY_HEIGHT 35
+#define GUY_START_PIXEL 448
+#define CHAIR_WIDTH 124
+#define CHAIR_HEIGHT 112
+#define CHAIR_START_PIXEL 574
+
 namespace {
 enum class Action {
   LEFT,

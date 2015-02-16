@@ -1,3 +1,3 @@
-FLAGS=-L/usr/local/lib -lcygwin -lSDL2_image -lSDL2main -lSDL2 -I/usr/local/include/SDL2 -I/usr/include/mingw -Dmain=SDL_main -std=c++11 -g
+FLAGS=-std=c++11 -g -L/usr/lib/x86_64-linux-gnu -lSDL2 -I/usr/include/SDL2 -D_REENTRANT -lSDL2_image
 game: assets.h main.cpp
 	clang++ -o game main.cpp $(FLAGS)
