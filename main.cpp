@@ -118,9 +118,6 @@ void read_input(State& world_data) {
           case SDLK_DOWN: {
             world_data.actions.erase(Action::DOWN);
           } break;
-          case SDLK_SPACE: {
-            world_data.actions.erase(Action::SHOOT);
-          } break;
         }
       } break;
     }
@@ -131,6 +128,15 @@ void normalize(float x, float y, float& norm_x, float& norm_y){
   auto len = x != 0 && y != 0 ? hypot(x,y) : 1;
   norm_x = x / len;
   norm_y = y / len;
+}
+
+void make_mob(Renderable& rend){
+  rend.display_width = GUY_WIDTH;
+  rend.display_height = GUY_HEIGHT;
+  rend.sprite_offset_x = CHAIR_START_PIXEL;
+  rend.sprite_offset_y = 0;
+  rend.sprite_width = CHAIR_WIDTH;
+  rend.sprite_height = CHAIR_HEIGHT;
 }
 
 #define MOVE_DIST 5
@@ -153,6 +159,13 @@ bool update_logic(State& world_data) {
         vel_y = 1;
       } break;
       case Action::SHOOT: {
+        // generate new chair mob
+        auto new_mob_idx = world_data.next_entity_idx++;
+        auto& new_mob = world_data.entities[new_mob_idx];
+        new_mob.x = new_mob.y = 0;
+        auto& new_mob_rend = world_data.renderables[new_mob_idx];
+        make_mob(new_mob_rend);
+        world_data.actions.erase(Action::SHOOT);
       } break;
     }
   }
