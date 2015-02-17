@@ -5,10 +5,13 @@
 #include <unordered_set>
 #include <unordered_map>
 #include <vector>
+#include <glm/vec2.hpp>
+#include <glm/geometric.hpp>
 #include "SDL.h"
 #include "SDL_image.h"
 #include "assets.h"
 using namespace std;
+using namespace glm;
 
 #define GUY_WIDTH 32
 #define GUY_HEIGHT 35
@@ -27,16 +30,17 @@ enum class Action {
 };
 
 struct Entity {
-  int x, y;
+  vec2 pos;
+  vec2 vel;
 };
 
 struct Renderable {
   struct AnimationFrame{
-    int offset_x, offset_y;
-    AnimationFrame(int x, int y) : offset_x{x}, offset_y{y} {}
+    ivec2 offset;
+    AnimationFrame(ivec2 offset) : offset{offset} {}
   };
   int display_width, display_height;
-  int spritesheet_offset_x, spritesheet_offset_y;
+  ivec2 spritesheet_offset;
   int sprite_width, sprite_height;
   vector<AnimationFrame> frames;
   int cur_frame_idx;
@@ -56,7 +60,7 @@ struct State {
 
   State() : is_done{false}, next_entity_idx{0}, screen_w{800}, screen_h{600} {
     auto& hero = entities[next_entity_idx++];
-    hero.x = hero.y = 0;
+    hero.pos = vec2(0.0f);
     SDL_Init(SDL_INIT_TIMER | SDL_INIT_AUDIO | SDL_INIT_VIDEO | SDL_INIT_EVENTS);
     auto window = SDL_CreateWindow("game",
                                    SDL_WINDOWPOS_UNDEFINED,
@@ -80,12 +84,11 @@ struct State {
     auto& hero_rend = renderables[0];
     hero_rend.display_width = hero_rend.sprite_width = GUY_WIDTH;
     hero_rend.display_height = hero_rend.sprite_height = GUY_HEIGHT;
-    hero_rend.spritesheet_offset_x = GUY_START_PIXEL;
-    hero_rend.spritesheet_offset_y = 0;
-    hero_rend.frames.push_back(Renderable::AnimationFrame(0,0));
-    hero_rend.frames.push_back(Renderable::AnimationFrame(46,0));
-    hero_rend.frames.push_back(Renderable::AnimationFrame(92,0));
-    hero_rend.frames.push_back(Renderable::AnimationFrame(46,0));
+    hero_rend.spritesheet_offset = {GUY_START_PIXEL, 0};
+    hero_rend.frames.push_back(Renderable::AnimationFrame({0,0}));
+    hero_rend.frames.push_back(Renderable::AnimationFrame({46,0}));
+    hero_rend.frames.push_back(Renderable::AnimationFrame({92,0}));
+    hero_rend.frames.push_back(Renderable::AnimationFrame({46,0}));
     hero_rend.cur_frame_idx = 0;
     hero_rend.cur_frame_tick_count = 0;
   }
@@ -140,49 +143,44 @@ void read_input(State& world_data) {
   }
 }
 
-void normalize(float x, float y, float& norm_x, float& norm_y){
-  auto len = x != 0 || y != 0 ? hypot(x,y) : 1.0f;
-  norm_x = x / len;
-  norm_y = y / len;
-}
-
 void make_mob_rend(Renderable& rend){
   rend.display_width = GUY_WIDTH;
   rend.display_height = GUY_HEIGHT;
-  rend.spritesheet_offset_x = CHAIR_START_PIXEL;
-  rend.spritesheet_offset_y = 0;
+  rend.spritesheet_offset = {CHAIR_START_PIXEL, 0};
   rend.sprite_width = CHAIR_WIDTH;
   rend.sprite_height = CHAIR_HEIGHT;
-  rend.frames.push_back(Renderable::AnimationFrame(0,0));
+  rend.frames.push_back(Renderable::AnimationFrame({0,0}));
   rend.cur_frame_idx = 0;
   rend.cur_frame_tick_count = 0;
 }
 
-#define PLAYER_SPEED 5
-#define MOB_SPEED 4
+#define PLAYER_SPEED 5.0f
+#define MOB_SPEED 4.0f
+#define MOB_MASS 50
+#define MAX_FORCE 5.0f
 bool update_logic(State& world_data) {
-  float vel_x = 0;
-  float vel_y = 0;
+  vec2 vel = {0,0};
   auto& hero = world_data.entities[0];
   for(const auto& action : world_data.actions){
     switch(action){
       case Action::LEFT: {
-        vel_x = -1;
+        vel.x = -1;
       } break;
       case Action::RIGHT: {
-        vel_x = 1;
+        vel.x = 1;
       } break;
       case Action::UP: {
-        vel_y = -1;
+        vel.y = -1;
       } break;
       case Action::DOWN: {
-        vel_y = 1;
+        vel.y = 1;
       } break;
       case Action::SHOOT: {
         // generate new chair mob
         auto new_mob_idx = world_data.next_entity_idx++;
         auto& new_mob = world_data.entities[new_mob_idx];
-        new_mob.x = new_mob.y = 0;
+        new_mob.pos = {0,0};
+        new_mob.vel = {0,0};
         auto& new_mob_rend = world_data.renderables[new_mob_idx];
         make_mob_rend(new_mob_rend);
         world_data.mobs.insert(new_mob_idx);
@@ -190,18 +188,27 @@ bool update_logic(State& world_data) {
       } break;
     }
   }
-  float norm_vel_x = 0, norm_vel_y = 0;
-  normalize(vel_x, vel_y, norm_vel_x, norm_vel_y);
-  hero.x += norm_vel_x * PLAYER_SPEED;
-  hero.y += norm_vel_y * PLAYER_SPEED;
+  if(length(vel) > 0){
+    hero.pos += normalize(vel) * PLAYER_SPEED;
+  }
 
   // move mobs towards player
   for(const auto& mob_idx : world_data.mobs){
     auto& mob = world_data.entities[mob_idx];
-    float mob_vel_x = 0, mob_vel_y = 0;
-    normalize(hero.x - mob.x, hero.y - mob.y, mob_vel_x, mob_vel_y);
-    mob.x += mob_vel_x * MOB_SPEED;
-    mob.y += mob_vel_y * MOB_SPEED;
+    auto desired_vel = hero.pos - mob.pos;
+    if(length(desired_vel) > 0){
+      desired_vel = normalize(desired_vel) * MOB_SPEED;
+    }
+    auto steering = desired_vel - mob.vel;
+    if(length(steering) > MAX_FORCE){
+      steering = normalize(steering) * MAX_FORCE;
+    }
+    steering /= MOB_MASS;
+    mob.vel = mob.vel + steering;
+    if(length(mob.vel) > MOB_SPEED){
+      mob.vel = normalize(mob.vel) * MOB_SPEED;
+    }
+    mob.pos += mob.vel;
   }
 
   return world_data.is_done;
@@ -214,10 +221,9 @@ void render(State& world_data) {
   for(auto& rend_item : world_data.renderables){
     auto& entity = world_data.entities[rend_item.first];
     auto& rend = rend_item.second;
-    int x = rend.spritesheet_offset_x + rend.frames[rend.cur_frame_idx].offset_x;
-    int y = rend.spritesheet_offset_y + rend.frames[rend.cur_frame_idx].offset_y;
-    SDL_Rect srcrect{x, y, rend.sprite_width, rend.sprite_height};
-    SDL_Rect destrect{entity.x, entity.y, rend.display_width, rend.display_height};
+    ivec2 offset = rend.spritesheet_offset + rend.frames[rend.cur_frame_idx].offset;
+    SDL_Rect srcrect{offset.x, offset.y, rend.sprite_width, rend.sprite_height};
+    SDL_Rect destrect{(int)entity.pos.x, (int)entity.pos.y, rend.display_width, rend.display_height};
     SDL_RenderCopy(world_data.renderer, world_data.spritesheet, &srcrect, &destrect);
 
     ++rend.cur_frame_tick_count;
