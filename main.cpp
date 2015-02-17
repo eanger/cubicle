@@ -4,6 +4,7 @@
 #include <set>
 #include <unordered_set>
 #include <unordered_map>
+#include <vector>
 #include "SDL.h"
 #include "SDL_image.h"
 #include "assets.h"
@@ -30,9 +31,16 @@ struct Entity {
 };
 
 struct Renderable {
+  struct AnimationFrame{
+    int offset_x, offset_y;
+    AnimationFrame(int x, int y) : offset_x{x}, offset_y{y} {}
+  };
   int display_width, display_height;
-  int sprite_offset_x, sprite_offset_y;
+  int spritesheet_offset_x, spritesheet_offset_y;
   int sprite_width, sprite_height;
+  vector<AnimationFrame> frames;
+  int cur_frame_idx;
+  int cur_frame_tick_count;
 };
 
 struct State {
@@ -72,8 +80,14 @@ struct State {
     auto& hero_rend = renderables[0];
     hero_rend.display_width = hero_rend.sprite_width = GUY_WIDTH;
     hero_rend.display_height = hero_rend.sprite_height = GUY_HEIGHT;
-    hero_rend.sprite_offset_x = GUY_START_PIXEL;
-    hero_rend.sprite_offset_y = 0;
+    hero_rend.spritesheet_offset_x = GUY_START_PIXEL;
+    hero_rend.spritesheet_offset_y = 0;
+    hero_rend.frames.push_back(Renderable::AnimationFrame(0,0));
+    hero_rend.frames.push_back(Renderable::AnimationFrame(46,0));
+    hero_rend.frames.push_back(Renderable::AnimationFrame(92,0));
+    hero_rend.frames.push_back(Renderable::AnimationFrame(46,0));
+    hero_rend.cur_frame_idx = 0;
+    hero_rend.cur_frame_tick_count = 0;
   }
 };
 
@@ -135,10 +149,13 @@ void normalize(float x, float y, float& norm_x, float& norm_y){
 void make_mob_rend(Renderable& rend){
   rend.display_width = GUY_WIDTH;
   rend.display_height = GUY_HEIGHT;
-  rend.sprite_offset_x = CHAIR_START_PIXEL;
-  rend.sprite_offset_y = 0;
+  rend.spritesheet_offset_x = CHAIR_START_PIXEL;
+  rend.spritesheet_offset_y = 0;
   rend.sprite_width = CHAIR_WIDTH;
   rend.sprite_height = CHAIR_HEIGHT;
+  rend.frames.push_back(Renderable::AnimationFrame(0,0));
+  rend.cur_frame_idx = 0;
+  rend.cur_frame_tick_count = 0;
 }
 
 #define PLAYER_SPEED 5
@@ -190,16 +207,28 @@ bool update_logic(State& world_data) {
   return world_data.is_done;
 }
 
+#define TICKS_PER_FRAME 20
 void render(State& world_data) {
   SDL_SetRenderDrawColor(world_data.renderer, 255, 255, 255, 0);
   SDL_RenderClear(world_data.renderer);
-  for(auto& rend : world_data.renderables){
-    auto& entity = world_data.entities[rend.first];
-    SDL_Rect srcrect{rend.second.sprite_offset_x, rend.second.sprite_offset_y,
-                     rend.second.sprite_width,    rend.second.sprite_height};
-    SDL_Rect destrect{entity.x,                  entity.y,
-                      rend.second.display_width, rend.second.display_height};
+  for(auto& rend_item : world_data.renderables){
+    auto& entity = world_data.entities[rend_item.first];
+    auto& rend = rend_item.second;
+    int x = rend.spritesheet_offset_x + rend.frames[rend.cur_frame_idx].offset_x;
+    int y = rend.spritesheet_offset_y + rend.frames[rend.cur_frame_idx].offset_y;
+    SDL_Rect srcrect{x, y, rend.sprite_width, rend.sprite_height};
+    SDL_Rect destrect{entity.x, entity.y, rend.display_width, rend.display_height};
     SDL_RenderCopy(world_data.renderer, world_data.spritesheet, &srcrect, &destrect);
+
+    ++rend.cur_frame_tick_count;
+    if(rend.cur_frame_tick_count == TICKS_PER_FRAME){
+      if(rend.cur_frame_idx == rend.frames.size() - 1){
+        rend.cur_frame_idx = 0;
+      } else {
+        ++rend.cur_frame_idx;
+      }
+      rend.cur_frame_tick_count = 0;
+    }
   }
   SDL_RenderPresent(world_data.renderer);
 }

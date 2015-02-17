@@ -6,3 +6,7 @@ Ideas:
     bullet hell + mob avoid + weapons
     office themed, "mini game" from eggs
 
+To do:
+* animate player movement using sprite sheet, including turning
+* use friction for better feeling movement
+* make mobs not overlap each other
