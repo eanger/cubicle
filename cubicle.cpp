@@ -172,6 +172,7 @@ void make_mob_rend(Renderable& rend){
 #define MAX_FORCE 8.0f
 #define MAX_SEE_AHEAD 50
 #define MOB_COLLIDE_SIZE 50
+#define FRICTION_COEFF 10.0f
 bool update_logic(State& world_data) {
   vec2 vel = {0,0};
   auto& hero = world_data.entities[0];
@@ -210,9 +211,6 @@ bool update_logic(State& world_data) {
   for(const auto& mob_idx : world_data.mobs){
     auto& mob = world_data.entities[mob_idx];
     auto desired_vel = hero.pos - mob.pos;
-    if(length(desired_vel) > 0){
-      desired_vel = normalize(desired_vel) * MOB_SPEED;
-    }
     auto steering = desired_vel - mob.vel;
 
     // collision avoidance
@@ -232,6 +230,11 @@ bool update_logic(State& world_data) {
       steering += avoid_force;
     }
 
+    // friction
+    auto friction = -mob.vel * FRICTION_COEFF;
+    steering += friction;
+
+    // clamp forces and velocities
     if(length(steering) > MAX_FORCE){
       steering = normalize(steering) * MAX_FORCE;
     }
