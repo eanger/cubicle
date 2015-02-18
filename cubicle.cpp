@@ -157,7 +157,9 @@ void make_mob_rend(Renderable& rend){
 #define PLAYER_SPEED 5.0f
 #define MOB_SPEED 4.0f
 #define MOB_MASS 50
-#define MAX_FORCE 5.0f
+#define MAX_FORCE 8.0f
+#define MAX_SEE_AHEAD 50
+#define MOB_COLLIDE_SIZE 50
 bool update_logic(State& world_data) {
   vec2 vel = {0,0};
   auto& hero = world_data.entities[0];
@@ -200,6 +202,24 @@ bool update_logic(State& world_data) {
       desired_vel = normalize(desired_vel) * MOB_SPEED;
     }
     auto steering = desired_vel - mob.vel;
+
+    // collision avoidance
+    if(length(mob.vel) > 0){
+      auto ahead = mob.pos + mob.vel / length(mob.vel) * (float) MAX_SEE_AHEAD;
+      float closest = MAX_SEE_AHEAD;
+      vec2 avoid_force;
+      for(const auto& collide_idx : world_data.mobs){
+        const auto& collide = world_data.entities[collide_idx];
+        if(&collide == &mob){ continue; }
+        if(length(ahead - collide.pos) > MOB_COLLIDE_SIZE){ continue; }
+        if(distance(mob.pos, collide.pos) < closest){
+          closest = distance(mob.pos, collide.pos);
+          avoid_force = ahead - collide.pos;
+        }
+      }
+      steering += avoid_force;
+    }
+
     if(length(steering) > MAX_FORCE){
       steering = normalize(steering) * MAX_FORCE;
     }
