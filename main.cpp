@@ -184,10 +184,10 @@ bool update_logic(State& world_data) {
         auto& new_mob_rend = world_data.renderables[new_mob_idx];
         make_mob_rend(new_mob_rend);
         world_data.mobs.insert(new_mob_idx);
-        world_data.actions.erase(Action::SHOOT);
       } break;
     }
   }
+  world_data.actions.erase(Action::SHOOT);
   if(length(vel) > 0){
     hero.pos += normalize(vel) * PLAYER_SPEED;
   }
