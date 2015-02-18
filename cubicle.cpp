@@ -1,6 +1,7 @@
 #include <cassert>
 #include <cmath>
 #include <iostream>
+#include <random>
 #include <set>
 #include <unordered_set>
 #include <unordered_map>
@@ -57,8 +58,19 @@ struct State {
   unordered_set<int> mobs;
   SDL_Renderer* renderer;
   SDL_Texture* spritesheet;
+  random_device rd;
+  mt19937 mt;
+  uniform_real_distribution<float> rand_x;
+  uniform_real_distribution<float> rand_y;
 
-  State() : is_done{false}, next_entity_idx{0}, screen_w{800}, screen_h{600} {
+  State()
+      : is_done{false},
+        next_entity_idx{0},
+        screen_w{800},
+        screen_h{600},
+        mt{rd()},
+        rand_x(0, screen_w),
+        rand_y(0, screen_h) {
     auto& hero = entities[next_entity_idx++];
     hero.pos = vec2(0.0f);
     SDL_Init(SDL_INIT_TIMER | SDL_INIT_AUDIO | SDL_INIT_VIDEO | SDL_INIT_EVENTS);
@@ -181,7 +193,7 @@ bool update_logic(State& world_data) {
         // generate new chair mob
         auto new_mob_idx = world_data.next_entity_idx++;
         auto& new_mob = world_data.entities[new_mob_idx];
-        new_mob.pos = {0,0};
+        new_mob.pos = {world_data.rand_x(world_data.mt), world_data.rand_y(world_data.mt)};
         new_mob.vel = {0,0};
         auto& new_mob_rend = world_data.renderables[new_mob_idx];
         make_mob_rend(new_mob_rend);
