@@ -27,7 +27,8 @@ enum class Action {
   RIGHT,
   UP,
   DOWN,
-  SHOOT
+  SHOOT,
+  CLICK
 };
 
 struct Entity {
@@ -60,6 +61,7 @@ struct State {
   mt19937 mt;
   uniform_real_distribution<float> rand_x;
   uniform_real_distribution<float> rand_y;
+  vec2 mouse_pos;
 
   State()
       : is_done{false},
@@ -154,6 +156,11 @@ void read_input(State& world_data) {
           } break;
         }
       } break;
+      // event.motion.x,y
+      case SDL_MOUSEBUTTONDOWN: {
+        world_data.actions.insert(Action::CLICK);
+        world_data.mouse_pos = {event.motion.x, event.motion.y};
+      } break;
     }
   }
 }
@@ -211,9 +218,20 @@ bool update_logic(State& world_data) {
         make_mob_rend(new_mob_rend);
         world_data.mobs.insert(new_mob_idx);
       } break;
+      case Action::CLICK: {
+        // generate new chair mob
+        auto new_mob_idx = world_data.next_entity_idx++;
+        auto& new_mob = world_data.entities[new_mob_idx];
+        new_mob.pos = world_data.mouse_pos;
+        new_mob.vel = {0,0};
+        auto& new_mob_rend = world_data.renderables[new_mob_idx];
+        make_mob_rend(new_mob_rend);
+        world_data.mobs.insert(new_mob_idx);
+      } break;
     }
   }
   world_data.actions.erase(Action::SHOOT);
+  world_data.actions.erase(Action::CLICK);
   auto vel_len = length(vel);
   if(vel_len > 0){
     hero.pos += normalize(vel) * PLAYER_SPEED;
