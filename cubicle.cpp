@@ -36,14 +36,12 @@ struct Entity {
 };
 
 struct Renderable {
-  struct AnimationFrame{
-    ivec2 offset;
-    AnimationFrame(ivec2 offset) : offset{offset} {}
-  };
   int display_width, display_height;
   ivec2 spritesheet_offset;
   int sprite_width, sprite_height;
-  vector<AnimationFrame> frames;
+  vector<int> frames;
+  vector<int> directions;
+  int facing_idx;
   int cur_frame_idx;
   int cur_frame_tick_count;
 };
@@ -97,10 +95,15 @@ struct State {
     hero_rend.display_width = hero_rend.sprite_width = GUY_WIDTH;
     hero_rend.display_height = hero_rend.sprite_height = GUY_HEIGHT;
     hero_rend.spritesheet_offset = {GUY_START_PIXEL, 0};
-    hero_rend.frames.push_back(Renderable::AnimationFrame({0,0}));
-    hero_rend.frames.push_back(Renderable::AnimationFrame({46,0}));
-    hero_rend.frames.push_back(Renderable::AnimationFrame({92,0}));
-    hero_rend.frames.push_back(Renderable::AnimationFrame({46,0}));
+    hero_rend.directions.emplace_back(0);
+    hero_rend.directions.emplace_back(37);
+    hero_rend.directions.emplace_back(73);
+    hero_rend.directions.emplace_back(108);
+    hero_rend.frames.emplace_back(0);
+    hero_rend.frames.emplace_back(46);
+    hero_rend.frames.emplace_back(92);
+    hero_rend.frames.emplace_back(46);
+    hero_rend.facing_idx = 0;
     hero_rend.cur_frame_idx = 0;
     hero_rend.cur_frame_tick_count = 0;
   }
@@ -161,7 +164,9 @@ void make_mob_rend(Renderable& rend){
   rend.spritesheet_offset = {CHAIR_START_PIXEL, 0};
   rend.sprite_width = CHAIR_WIDTH;
   rend.sprite_height = CHAIR_HEIGHT;
-  rend.frames.push_back(Renderable::AnimationFrame({0,0}));
+  rend.directions.emplace_back(0);
+  rend.frames.emplace_back(0);
+  rend.facing_idx = 0;
   rend.cur_frame_idx = 0;
   rend.cur_frame_tick_count = 0;
 }
@@ -173,22 +178,28 @@ void make_mob_rend(Renderable& rend){
 #define MAX_SEE_AHEAD 50
 #define MOB_COLLIDE_SIZE 50
 #define FRICTION_COEFF 10.0f
+#define TICKS_PER_FRAME 20
 bool update_logic(State& world_data) {
   vec2 vel = {0,0};
   auto& hero = world_data.entities[0];
+  int facing_idx;
   for(const auto& action : world_data.actions){
     switch(action){
-      case Action::LEFT: {
-        vel.x = -1;
+      case Action::DOWN: {
+        vel.y = 1;
+        facing_idx = 0;
       } break;
       case Action::RIGHT: {
         vel.x = 1;
+        facing_idx = 1;
       } break;
       case Action::UP: {
         vel.y = -1;
+        facing_idx = 2;
       } break;
-      case Action::DOWN: {
-        vel.y = 1;
+      case Action::LEFT: {
+        vel.x = -1;
+        facing_idx = 3;
       } break;
       case Action::SHOOT: {
         // generate new chair mob
@@ -203,8 +214,21 @@ bool update_logic(State& world_data) {
     }
   }
   world_data.actions.erase(Action::SHOOT);
-  if(length(vel) > 0){
+  auto vel_len = length(vel);
+  if(vel_len > 0){
     hero.pos += normalize(vel) * PLAYER_SPEED;
+
+    auto& hero_rend = world_data.renderables[0];
+    hero_rend.facing_idx = facing_idx;
+    ++hero_rend.cur_frame_tick_count;
+    if(hero_rend.cur_frame_tick_count == TICKS_PER_FRAME){
+      if(hero_rend.cur_frame_idx == hero_rend.frames.size() - 1){
+        hero_rend.cur_frame_idx = 0;
+      } else {
+        ++hero_rend.cur_frame_idx;
+      }
+      hero_rend.cur_frame_tick_count = 0;
+    }
   }
 
   // move mobs towards player
@@ -249,27 +273,18 @@ bool update_logic(State& world_data) {
   return world_data.is_done;
 }
 
-#define TICKS_PER_FRAME 20
 void render(State& world_data) {
   SDL_SetRenderDrawColor(world_data.renderer, 255, 255, 255, 0);
   SDL_RenderClear(world_data.renderer);
   for(auto& rend_item : world_data.renderables){
     auto& entity = world_data.entities[rend_item.first];
     auto& rend = rend_item.second;
-    ivec2 offset = rend.spritesheet_offset + rend.frames[rend.cur_frame_idx].offset;
+    ivec2 animation_frame(rend.frames[rend.cur_frame_idx],
+                          rend.directions[rend.facing_idx]);
+    ivec2 offset = rend.spritesheet_offset + animation_frame;
     SDL_Rect srcrect{offset.x, offset.y, rend.sprite_width, rend.sprite_height};
     SDL_Rect destrect{(int)entity.pos.x, (int)entity.pos.y, rend.display_width, rend.display_height};
     SDL_RenderCopy(world_data.renderer, world_data.spritesheet, &srcrect, &destrect);
-
-    ++rend.cur_frame_tick_count;
-    if(rend.cur_frame_tick_count == TICKS_PER_FRAME){
-      if(rend.cur_frame_idx == rend.frames.size() - 1){
-        rend.cur_frame_idx = 0;
-      } else {
-        ++rend.cur_frame_idx;
-      }
-      rend.cur_frame_tick_count = 0;
-    }
   }
   SDL_RenderPresent(world_data.renderer);
 }
