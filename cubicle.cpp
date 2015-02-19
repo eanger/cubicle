@@ -152,7 +152,20 @@ void read_input(State& world_data) {
   }
 }
 
-void make_worker_rend(Renderable& rend){
+void make_chair_rend(Renderable& rend) {
+  rend.display_width = GUY_WIDTH;
+  rend.sprite_width = CHAIR_WIDTH;
+  rend.display_height = GUY_HEIGHT;
+  rend.sprite_height = CHAIR_HEIGHT;
+  rend.spritesheet_offset = {CHAIR_START_PIXEL, 0};
+  rend.directions.emplace_back(0);
+  rend.frames.emplace_back(0);
+  rend.facing_idx = 0;
+  rend.cur_frame_idx = 0;
+  rend.cur_frame_tick_count = 0;
+}
+
+void make_worker_rend(Renderable& rend) {
   rend.display_width = rend.sprite_width = GUY_WIDTH;
   rend.display_height = rend.sprite_height = GUY_HEIGHT;
   rend.spritesheet_offset = {GUY_START_PIXEL, 0};
@@ -207,14 +220,13 @@ bool update_logic(float dt, State& world_data) {
         world_data.workers.insert(new_worker_idx);
       } break;
       case Action::CLICK: {
-        // generate new worker
-        auto new_worker_idx = world_data.next_entity_idx++;
-        auto& new_worker = world_data.entities[new_worker_idx];
-        new_worker.pos = world_data.mouse_pos;
-        new_worker.vel = {0,0};
-        auto& new_worker_rend = world_data.renderables[new_worker_idx];
-        make_worker_rend(new_worker_rend);
-        world_data.workers.insert(new_worker_idx);
+        // generate new chair
+        auto new_chair_idx = world_data.next_entity_idx++;
+        auto& new_chair = world_data.entities[new_chair_idx];
+        new_chair.pos = world_data.mouse_pos;
+        new_chair.vel = {0,0};
+        auto& new_chair_rend = world_data.renderables[new_chair_idx];
+        make_chair_rend(new_chair_rend);
       } break;
     }
   }

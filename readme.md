@@ -7,5 +7,4 @@ Ideas:
     office themed, "mini game" from eggs
 
 To do:
-* make CLICK create a chair entity at mouse position
 * bring in event queue: on click, new create chair job is created. When worker isn't busy, take task off queue and go to that place. When he arrives, build chair and liberate worker.
