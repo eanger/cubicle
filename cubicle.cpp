@@ -178,14 +178,30 @@ void make_mob_rend(Renderable& rend){
   rend.cur_frame_tick_count = 0;
 }
 
+template<typename T>
+bool isNonZero(const T& val) {
+  return val != T(0);
+}
+
+template<typename T>
+T truncate(const T& val, float max_len) {
+  auto res = val;
+  if(isNonZero(val) && length(val) > max_len){
+    res = normalize(res) * max_len;
+  }
+  return res;
+}
+
 #define PLAYER_SPEED 5.0f
 #define MOB_SPEED 4.0f
-#define MOB_MASS 50
+#define MOB_MASS 2.0f
 #define MAX_FORCE 8.0f
 #define MAX_SEE_AHEAD 50
 #define MOB_COLLIDE_SIZE 50
 #define FRICTION_COEFF 10.0f
 #define TICKS_PER_FRAME 20
+#define SLOWING_RADIUS 50.0f
+#define ARRIVAL_RADIUS 5.0f
 bool update_logic(State& world_data) {
   vec2 vel = {0,0};
   auto& hero = world_data.entities[0];
@@ -232,10 +248,9 @@ bool update_logic(State& world_data) {
   }
   world_data.actions.erase(Action::SHOOT);
   world_data.actions.erase(Action::CLICK);
-  auto vel_len = length(vel);
-  if(vel_len > 0){
-    hero.pos += normalize(vel) * PLAYER_SPEED;
-
+  vel = truncate(vel, 1) * PLAYER_SPEED;
+  hero.pos += vel;
+  if(isNonZero(vel)){
     auto& hero_rend = world_data.renderables[0];
     hero_rend.facing_idx = facing_idx;
     ++hero_rend.cur_frame_tick_count;
@@ -253,11 +268,10 @@ bool update_logic(State& world_data) {
   for(const auto& mob_idx : world_data.mobs){
     auto& mob = world_data.entities[mob_idx];
     auto desired_vel = hero.pos - mob.pos;
-    auto steering = desired_vel - mob.vel;
 
     // collision avoidance
-    if(length(mob.vel) > 0){
-      auto ahead = mob.pos + mob.vel / length(mob.vel) * (float) MAX_SEE_AHEAD;
+    if(isNonZero(mob.vel)){
+      auto ahead = mob.pos + truncate(mob.vel, MAX_SEE_AHEAD);
       float closest = MAX_SEE_AHEAD;
       vec2 avoid_force;
       for(const auto& collide_idx : world_data.mobs){
@@ -269,22 +283,23 @@ bool update_logic(State& world_data) {
           avoid_force = ahead - collide.pos;
         }
       }
-      steering += avoid_force;
+      desired_vel += avoid_force;
     }
 
-    // friction
-    auto friction = -mob.vel * FRICTION_COEFF;
-    steering += friction;
+    // arrival
+    auto dist = distance(mob.pos, hero.pos);
+    assert(!isnan(dist) && "invalid distance between mob and hero");
+    if(dist < SLOWING_RADIUS){
+      auto slowing_amount = dist / SLOWING_RADIUS;
+      desired_vel *= slowing_amount;
+      if(dist < ARRIVAL_RADIUS){
+        desired_vel *= 0;
+      }
+    }
 
-    // clamp forces and velocities
-    if(length(steering) > MAX_FORCE){
-      steering = normalize(steering) * MAX_FORCE;
-    }
-    steering /= MOB_MASS;
-    mob.vel = mob.vel + steering;
-    if(length(mob.vel) > MOB_SPEED){
-      mob.vel = normalize(mob.vel) * MOB_SPEED;
-    }
+    auto steering_force = truncate(desired_vel - mob.vel, MAX_FORCE);
+    auto steering_vel = steering_force / MOB_MASS;
+    mob.vel = truncate(mob.vel + steering_vel, MOB_SPEED);
     mob.pos += mob.vel;
   }
 

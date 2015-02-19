@@ -7,5 +7,4 @@ Ideas:
     office themed, "mini game" from eggs
 
 To do:
-* use friction for better feeling movement
-* make mobs not overlap each other
+* use time-since-last-update as the tick length for calculating moved distances, so game doesn't slow down too much
