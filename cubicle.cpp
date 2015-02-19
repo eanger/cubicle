@@ -1,4 +1,5 @@
 #include <cassert>
+#include <chrono>
 #include <cmath>
 #include <iostream>
 #include <random>
@@ -12,6 +13,7 @@
 #include "SDL_image.h"
 #include "assets.h"
 using namespace std;
+using namespace std::chrono;
 using namespace glm;
 
 #define GUY_WIDTH 32
@@ -44,7 +46,7 @@ struct Renderable {
   vector<int> directions;
   int facing_idx;
   int cur_frame_idx;
-  int cur_frame_tick_count;
+  float cur_frame_tick_count;
 };
 
 struct State {
@@ -192,17 +194,17 @@ T truncate(const T& val, float max_len) {
   return res;
 }
 
-#define PLAYER_SPEED 5.0f
-#define MOB_SPEED 4.0f
+#define PLAYER_SPEED 300.0f
+#define MOB_SPEED 240.0f
 #define MOB_MASS 2.0f
 #define MAX_FORCE 8.0f
 #define MAX_SEE_AHEAD 50
 #define MOB_COLLIDE_SIZE 50
 #define FRICTION_COEFF 10.0f
-#define TICKS_PER_FRAME 20
+#define DISTANCE_PER_FRAME 20
 #define SLOWING_RADIUS 50.0f
 #define ARRIVAL_RADIUS 5.0f
-bool update_logic(State& world_data) {
+bool update_logic(float dt, State& world_data) {
   vec2 vel = {0,0};
   auto& hero = world_data.entities[0];
   int facing_idx;
@@ -249,12 +251,12 @@ bool update_logic(State& world_data) {
   world_data.actions.erase(Action::SHOOT);
   world_data.actions.erase(Action::CLICK);
   vel = truncate(vel, 1) * PLAYER_SPEED;
-  hero.pos += vel;
+  hero.pos += vel * dt;
   if(isNonZero(vel)){
     auto& hero_rend = world_data.renderables[0];
     hero_rend.facing_idx = facing_idx;
-    ++hero_rend.cur_frame_tick_count;
-    if(hero_rend.cur_frame_tick_count == TICKS_PER_FRAME){
+    hero_rend.cur_frame_tick_count += length(vel * dt);
+    if(hero_rend.cur_frame_tick_count >= DISTANCE_PER_FRAME){
       if(hero_rend.cur_frame_idx == hero_rend.frames.size() - 1){
         hero_rend.cur_frame_idx = 0;
       } else {
@@ -300,7 +302,7 @@ bool update_logic(State& world_data) {
     auto steering_force = truncate(desired_vel - mob.vel, MAX_FORCE);
     auto steering_vel = steering_force / MOB_MASS;
     mob.vel = truncate(mob.vel + steering_vel, MOB_SPEED);
-    mob.pos += mob.vel;
+    mob.pos += mob.vel * dt;
   }
 
   return world_data.is_done;
@@ -326,9 +328,13 @@ void render(State& world_data) {
 int main(int argc, char** argv) {
   bool done = false;
   State world_data;
+  time_point<high_resolution_clock> last_clock_time = high_resolution_clock::now();
   while(!done){
     read_input(world_data);
-    done = update_logic(world_data);
+    auto time = high_resolution_clock::now();
+    duration<float> elapsed = time - last_clock_time;
+    last_clock_time = time;
+    done = update_logic(elapsed.count(), world_data);
     render(world_data);
   }
   cout << "Game over\n";
