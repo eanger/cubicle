@@ -115,7 +115,7 @@ struct State {
   State() : is_done{false}, next_entity_idx{1} {}
 };
 
-void read_input(State& world_data) {
+void readInput(State& world_data) {
   SDL_Event event;
   while(SDL_PollEvent(&event)){
     switch(event.type){
@@ -171,7 +171,7 @@ void read_input(State& world_data) {
   }
 }
 
-int make_chair(State& world_data, ivec2 pos) {
+int makeChair(State& world_data, ivec2 pos) {
   auto new_chair_idx = world_data.next_entity_idx++;
   auto& new_chair = world_data.entities[new_chair_idx];
   new_chair.pos = pos;
@@ -192,14 +192,14 @@ int make_chair(State& world_data, ivec2 pos) {
   return new_chair_idx;
 }
 
-int make_chair_plan(State& world_data, ivec2 pos) {
-  auto idx = make_chair(world_data, pos);
+int makeChairPlan(State& world_data, ivec2 pos) {
+  auto idx = makeChair(world_data, pos);
   world_data.renderables[idx].alpha = CHAIR_PLAN_ALPHA;
   world_data.collideables.erase(idx);
   return idx;
 }
 
-void make_worker_rend(Renderable& rend) {
+void makeWorkerRend(Renderable& rend) {
   rend.display_width = rend.sprite_width = GUY_WIDTH;
   rend.display_height = rend.sprite_height = GUY_HEIGHT;
   rend.spritesheet_offset = {GUY_START_PIXEL, 0};
@@ -308,7 +308,7 @@ void makeIdleTask(State& world_data, Task& task, Entity& worker) {
                                        worker.pos.y + MAX_WANDER_DIST)};
 }
 
-bool update_logic(float dt, State& world_data) {
+bool updateLogic(float dt, State& world_data) {
   for(const auto& action : world_data.actions){
     switch(action){
       case Action::RESET: {
@@ -323,7 +323,7 @@ bool update_logic(float dt, State& world_data) {
                           getRandInRange(0, SCREEN_HEIGHT)};
         new_worker.vel = {0,0};
         auto& new_worker_rend = world_data.renderables[new_worker_idx];
-        make_worker_rend(new_worker_rend);
+        makeWorkerRend(new_worker_rend);
         world_data.workers[new_worker_idx];
         world_data.collideables.insert(new_worker_idx);
       } break;
@@ -332,7 +332,7 @@ bool update_logic(float dt, State& world_data) {
         auto chair_pos = world_data.mouse_pos;
         chair_pos.x -= GUY_WIDTH / 2;
         chair_pos.y -= GUY_HEIGHT / 2;
-        auto plan_idx = make_chair_plan(world_data, chair_pos);
+        auto plan_idx = makeChairPlan(world_data, chair_pos);
         world_data.tasks.push({plan_idx, CHAIR_BUILD_TIME, Task::Chore::BUILD_CHAIR});
       } break;
     }
@@ -366,7 +366,7 @@ bool update_logic(float dt, State& world_data) {
         if(dist < ARRIVAL_RADIUS){
           worker.vel = {0,0};
           if(percent_done >= 1.0f){ 
-            make_chair(world_data, target);
+            makeChair(world_data, target);
             world_data.delete_entity(task.entity_idx);
             makeIdleTask(world_data, task, worker);
           } else {
@@ -429,11 +429,11 @@ int main(int argc, char** argv) {
   State world_data;
   time_point<high_resolution_clock> last_clock_time = high_resolution_clock::now();
   while(!done){
-    read_input(world_data);
+    readInput(world_data);
     auto time = high_resolution_clock::now();
     duration<float> elapsed = time - last_clock_time;
     last_clock_time = time;
-    done = update_logic(elapsed.count(), world_data);
+    done = updateLogic(elapsed.count(), world_data);
     render(world_data, renderer, spritesheet);
   }
   cout << "Game over\n";
