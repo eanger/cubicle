@@ -42,6 +42,10 @@ using namespace glm;
 #define CHAIR_BUILD_TIME 4.0f
 #define CHAIR_PLAN_ALPHA 25
 
+#define IDLE_TASK_MIN_TIME 0.0f
+#define IDLE_TASK_MAX_TIME 1.0f
+#define MAX_WANDER_DIST 10.0f
+
 namespace {
 random_device rd;
 
@@ -82,7 +86,8 @@ struct Task {
   } chore;
 
   Task()
-      : required_time{numeric_limits<float>::infinity()},
+      : entity_idx{0},
+        required_time{numeric_limits<float>::infinity()},
         time_worked_on{0},
         chore(Chore::IDLE) {}
   Task(int idx, float t, Chore c)
@@ -99,9 +104,6 @@ struct State {
   unordered_set<int> collideables;
   vec2 mouse_pos;
   queue<Task> tasks;
-  mt19937 mt;
-  uniform_real_distribution<float> rand_x;
-  uniform_real_distribution<float> rand_y;
 
   void delete_entity(int entity) {
     entities.erase(entity);
@@ -110,12 +112,7 @@ struct State {
     collideables.erase(entity);
   }
 
-  State()
-      : is_done{false},
-        next_entity_idx{0},
-        mt{rd()},
-        rand_x(0, SCREEN_WIDTH),
-        rand_y(0, SCREEN_HEIGHT) {}
+  State() : is_done{false}, next_entity_idx{1} {}
 };
 
 void read_input(State& world_data) {
@@ -234,6 +231,83 @@ T truncate(const T& val, float max_len) {
   return res;
 }
 
+float getRandInRange(float start, float end) {
+  static random_device rd;
+  static mt19937 mt{rd()};
+  uniform_real_distribution<float> rand{start, end};
+  return rand(mt);
+}
+
+void moveTowardsTarget(State& world_data, int worker_idx, vec2& target, float dt) {
+  auto& worker = world_data.entities[worker_idx];
+  auto desired_force = vec2{0};
+  if(isNonZero(target - worker.pos)){
+    desired_force = normalize(target - worker.pos) * MAX_FORCE;
+  }
+
+  // collision avoidance
+  if(isNonZero(worker.vel)){
+    auto ahead = worker.pos + truncate(worker.vel, MAX_SEE_AHEAD);
+    float closest = MAX_SEE_AHEAD;
+    vec2 avoid_force(0);
+    for(const auto& collide_idx : world_data.collideables){
+      const auto& collide = world_data.entities[collide_idx];
+      if(collide_idx == worker_idx){ continue; }
+      if(length(ahead - collide.pos) > MOB_COLLIDE_SIZE){ continue; }
+      if(distance(worker.pos, collide.pos) < closest){
+        closest = distance(worker.pos, collide.pos);
+        avoid_force = ahead - collide.pos;
+      }
+    }
+    desired_force += avoid_force;
+  }
+
+  // arrival
+  auto dist = distance(worker.pos, target);
+  if(dist < SLOWING_RADIUS){
+    auto slowing_amount = clamp(dist / SLOWING_RADIUS, 0.1f, 1.0f);
+    desired_force *= slowing_amount;
+  }
+
+  auto steering_force = truncate(desired_force, MAX_FORCE);
+  auto steering_vel = steering_force / MOB_MASS;
+  worker.vel = truncate(worker.vel + steering_vel, MOB_SPEED);
+  // down right up left
+  float dot_prods[4] = {dot(worker.vel, {0, 1}),  dot(worker.vel, {1, 0}),
+                        dot(worker.vel, {0, -1}), dot(worker.vel, {-1, 0})};
+  auto max_elem = max_element(begin(dot_prods), end(dot_prods));
+  auto facing_idx = std::distance(begin(dot_prods), max_elem);
+  if(isNonZero(worker.vel)){
+    auto& rend = world_data.renderables[worker_idx];
+    rend.facing_idx = facing_idx;
+    rend.cur_frame_tick_count += length(worker.vel * dt);
+    if(rend.cur_frame_tick_count >= DISTANCE_PER_FRAME){
+      if(rend.cur_frame_idx == rend.frames.size() - 1){
+        rend.cur_frame_idx = 0;
+      } else {
+        ++rend.cur_frame_idx;
+      }
+      rend.cur_frame_tick_count = 0;
+    }
+  }  
+  worker.pos += worker.vel * dt;
+}
+
+void makeIdleTask(State& world_data, Task& task, Entity& worker) {
+  task.chore = Task::Chore::IDLE;
+  if(task.entity_idx != 0){
+    world_data.entities.erase(task.entity_idx);
+  }
+  task.entity_idx = world_data.next_entity_idx++;
+  auto& new_entity = world_data.entities[task.entity_idx];
+  task.time_worked_on = 0;
+  task.required_time = getRandInRange(IDLE_TASK_MIN_TIME, IDLE_TASK_MAX_TIME);
+  new_entity.pos = vec2{getRandInRange(worker.pos.x - MAX_WANDER_DIST,
+                                       worker.pos.x + MAX_WANDER_DIST),
+                        getRandInRange(worker.pos.y - MAX_WANDER_DIST,
+                                       worker.pos.y + MAX_WANDER_DIST)};
+}
+
 bool update_logic(float dt, State& world_data) {
   for(const auto& action : world_data.actions){
     switch(action){
@@ -245,7 +319,8 @@ bool update_logic(float dt, State& world_data) {
         // generate new worker
         auto new_worker_idx = world_data.next_entity_idx++;
         auto& new_worker = world_data.entities[new_worker_idx];
-        new_worker.pos = {world_data.rand_x(world_data.mt), world_data.rand_y(world_data.mt)};
+        new_worker.pos = {getRandInRange(0, SCREEN_WIDTH),
+                          getRandInRange(0, SCREEN_HEIGHT)};
         new_worker.vel = {0,0};
         auto& new_worker_rend = world_data.renderables[new_worker_idx];
         make_worker_rend(new_worker_rend);
@@ -264,85 +339,42 @@ bool update_logic(float dt, State& world_data) {
   }
   world_data.actions.clear();
 
-  // move workers towards target
   for(auto& worker_iter : world_data.workers){
     const auto& id = worker_iter.first;
     auto& task = worker_iter.second;
+    auto& worker = world_data.entities[id];
+    auto target = world_data.entities[task.entity_idx].pos;
+    task.time_worked_on += dt;
+    float percent_done = task.time_worked_on / task.required_time;
     switch(task.chore){
       case Task::Chore::IDLE: {
         if(!world_data.tasks.empty()){
           task = world_data.tasks.front();
           world_data.tasks.pop();
         }
+        if(task.entity_idx != 0 && percent_done < 1.0f){
+          moveTowardsTarget(world_data, id, target, dt);
+        } else {
+          // if we've surpassed our bounds, make a new IDLE task with a random duration
+          makeIdleTask(world_data, task, worker);
+        }
+
       } break;
       case Task::Chore::BUILD_CHAIR: {
-        auto& worker = world_data.entities[id];
-        auto target = world_data.entities[task.entity_idx].pos;
         auto dist = distance(worker.pos, target);
         assert(!isnan(dist) && "invalid distance between worker and target");
         if(dist < ARRIVAL_RADIUS){
           worker.vel = {0,0};
-          task.time_worked_on += dt;
-          float percent_done = task.time_worked_on / task.required_time;
           if(percent_done >= 1.0f){ 
             make_chair(world_data, target);
             world_data.delete_entity(task.entity_idx);
-            task.chore = Task::Chore::IDLE;
+            makeIdleTask(world_data, task, worker);
           } else {
             auto& rend = world_data.renderables[task.entity_idx];
             rend.alpha = mix(CHAIR_PLAN_ALPHA, 255, percent_done);
           }
         } else {
-          auto desired_force = vec2{0};
-          if(isNonZero(target - worker.pos)){
-            desired_force = normalize(target - worker.pos) * MAX_FORCE;
-          }
-
-          // collision avoidance
-          if(isNonZero(worker.vel)){
-            auto ahead = worker.pos + truncate(worker.vel, MAX_SEE_AHEAD);
-            float closest = MAX_SEE_AHEAD;
-            vec2 avoid_force(0);
-            for(const auto& collide_idx : world_data.collideables){
-              const auto& collide = world_data.entities[collide_idx];
-              if(collide_idx == id){ continue; }
-              if(length(ahead - collide.pos) > MOB_COLLIDE_SIZE){ continue; }
-              if(distance(worker.pos, collide.pos) < closest){
-                closest = distance(worker.pos, collide.pos);
-                avoid_force = ahead - collide.pos;
-              }
-            }
-            desired_force += avoid_force;
-          }
-
-          // arrival
-          if(dist < SLOWING_RADIUS){
-            auto slowing_amount = clamp(dist / SLOWING_RADIUS, 0.1f, 1.0f);
-            desired_force *= slowing_amount;
-          }
-
-          auto steering_force = truncate(desired_force, MAX_FORCE);
-          auto steering_vel = steering_force / MOB_MASS;
-          worker.vel = truncate(worker.vel + steering_vel, MOB_SPEED);
-          // down right up left
-          float dot_prods[4] = {dot(worker.vel, {0, 1}),  dot(worker.vel, {1, 0}),
-                                dot(worker.vel, {0, -1}), dot(worker.vel, {-1, 0})};
-          auto max_elem = max_element(begin(dot_prods), end(dot_prods));
-          auto facing_idx = std::distance(begin(dot_prods), max_elem);
-          if(isNonZero(worker.vel)){
-            auto& rend = world_data.renderables[id];
-            rend.facing_idx = facing_idx;
-            rend.cur_frame_tick_count += length(worker.vel * dt);
-            if(rend.cur_frame_tick_count >= DISTANCE_PER_FRAME){
-              if(rend.cur_frame_idx == rend.frames.size() - 1){
-                rend.cur_frame_idx = 0;
-              } else {
-                ++rend.cur_frame_idx;
-              }
-              rend.cur_frame_tick_count = 0;
-            }
-          }  
-          worker.pos += worker.vel * dt;
+          moveTowardsTarget(world_data, id, target, dt);
         }
       } break;
     }
