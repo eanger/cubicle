@@ -254,7 +254,10 @@ bool update_logic(float dt, State& world_data) {
       } break;
       case Action::CLICK: {
         // generate new chair task
-        auto plan_idx = make_chair_plan(world_data, world_data.mouse_pos);
+        auto chair_pos = world_data.mouse_pos;
+        chair_pos.x -= GUY_WIDTH / 2;
+        chair_pos.y -= GUY_HEIGHT / 2;
+        auto plan_idx = make_chair_plan(world_data, chair_pos);
         world_data.tasks.push({plan_idx, CHAIR_BUILD_TIME, Task::Chore::BUILD_CHAIR});
       } break;
     }

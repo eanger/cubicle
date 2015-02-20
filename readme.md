@@ -8,4 +8,4 @@ Ideas:
 
 To do:
 * workers oscillate when they can't reach a target that's too close to a collideable
-* workers wander around during their IDLE task
+* workers should wander around during their IDLE task
