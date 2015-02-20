@@ -33,7 +33,8 @@ enum class Action {
   UP,
   DOWN,
   SHOOT,
-  CLICK
+  CLICK,
+  RESET
 };
 
 struct Entity {
@@ -79,6 +80,14 @@ struct State {
   uniform_real_distribution<float> rand_y;
   vec2 mouse_pos;
   queue<Task> tasks;
+
+  void clear() {
+    next_entity_idx = 0;
+    entities.clear();
+    renderables.clear();
+    workers.clear();
+    tasks = queue<Task>();
+  }
 
   State()
       : is_done{false},
@@ -137,6 +146,9 @@ void read_input(State& world_data) {
           } break;
           case SDLK_SPACE: {
             world_data.actions.insert(Action::SHOOT);
+          } break;
+          case SDLK_r: {
+            world_data.actions.insert(Action::RESET);
           } break;
         }
       } break;
@@ -226,6 +238,9 @@ T truncate(const T& val, float max_len) {
 bool update_logic(float dt, State& world_data) {
   for(const auto& action : world_data.actions){
     switch(action){
+      case Action::RESET: {
+        world_data.clear();
+      } break;
       case Action::SHOOT: {
         // generate new worker
         auto new_worker_idx = world_data.next_entity_idx++;
@@ -242,8 +257,7 @@ bool update_logic(float dt, State& world_data) {
       } break;
     }
   }
-  world_data.actions.erase(Action::SHOOT);
-  world_data.actions.erase(Action::CLICK);
+  world_data.actions.clear();
 
   // move workers towards target
   for(auto& worker_iter : world_data.workers){
