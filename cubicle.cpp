@@ -87,6 +87,7 @@ struct State {
   unordered_map<int, Entity> entities;
   unordered_map<int, Renderable> renderables;
   unordered_map<int, Task> workers;
+  unordered_set<int> collideables;
   vec2 mouse_pos;
   queue<Task> tasks;
   mt19937 mt;
@@ -97,6 +98,7 @@ struct State {
     entities.erase(entity);
     renderables.erase(entity);
     workers.erase(entity);
+    collideables.erase(entity);
   }
 
   State()
@@ -180,12 +182,14 @@ int make_chair(State& world_data, ivec2 pos) {
   rend.cur_frame_idx = 0;
   rend.cur_frame_tick_count = 0;
   rend.alpha = 255;
+  world_data.collideables.insert(new_chair_idx);
   return new_chair_idx;
 }
 
 int make_chair_plan(State& world_data, ivec2 pos) {
   auto idx = make_chair(world_data, pos);
   world_data.renderables[idx].alpha = 20;
+  world_data.collideables.erase(idx);
   return idx;
 }
 
@@ -237,6 +241,7 @@ bool update_logic(float dt, State& world_data) {
         auto& new_worker_rend = world_data.renderables[new_worker_idx];
         make_worker_rend(new_worker_rend);
         world_data.workers[new_worker_idx];
+        world_data.collideables.insert(new_worker_idx);
       } break;
       case Action::CLICK: {
         // generate new chair task
@@ -268,10 +273,9 @@ bool update_logic(float dt, State& world_data) {
           auto ahead = worker.pos + truncate(worker.vel, MAX_SEE_AHEAD);
           float closest = MAX_SEE_AHEAD;
           vec2 avoid_force;
-          for(const auto& collide_iter : world_data.workers){
-            const auto& collide_idx = collide_iter.first;
+          for(const auto& collide_idx : world_data.collideables){
             const auto& collide = world_data.entities[collide_idx];
-            if(&collide == &worker){ continue; }
+            if(collide_idx == id){ continue; }
             if(length(ahead - collide.pos) > MOB_COLLIDE_SIZE){ continue; }
             if(distance(worker.pos, collide.pos) < closest){
               closest = distance(worker.pos, collide.pos);
