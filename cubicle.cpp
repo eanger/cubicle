@@ -27,20 +27,20 @@ using namespace glm;
 #define CHAIR_HEIGHT 112
 #define CHAIR_START_PIXEL 574
 
-#define MOB_SPEED 300.0f
-#define MOB_MASS 2.0f
-#define MAX_FORCE 10.0f
+#define MOB_SPEED 200.0f
+#define MOB_MASS 5.0f
+#define MAX_FORCE 20.0f
 #define MAX_SEE_AHEAD 35
 #define MOB_COLLIDE_SIZE 30
 #define DISTANCE_PER_FRAME 20
-#define SLOWING_RADIUS 20.0f
+#define SLOWING_RADIUS 100.0f
 #define ARRIVAL_RADIUS 15.0f
 
 #define SCREEN_WIDTH 800
 #define SCREEN_HEIGHT 600
 
-#define CHAIR_BUILD_TIME 2.0f
-#define CHAIR_PLAN_ALPHA 20
+#define CHAIR_BUILD_TIME 4.0f
+#define CHAIR_PLAN_ALPHA 25
 
 namespace {
 random_device rd;
@@ -290,13 +290,16 @@ bool update_logic(float dt, State& world_data) {
             rend.alpha = mix(CHAIR_PLAN_ALPHA, 255, percent_done);
           }
         } else {
-          auto desired_vel = target - worker.pos;
+          auto desired_force = vec2{0};
+          if(isNonZero(target - worker.pos)){
+            desired_force = normalize(target - worker.pos) * MAX_FORCE;
+          }
 
           // collision avoidance
           if(isNonZero(worker.vel)){
             auto ahead = worker.pos + truncate(worker.vel, MAX_SEE_AHEAD);
             float closest = MAX_SEE_AHEAD;
-            vec2 avoid_force;
+            vec2 avoid_force(0);
             for(const auto& collide_idx : world_data.collideables){
               const auto& collide = world_data.entities[collide_idx];
               if(collide_idx == id){ continue; }
@@ -306,16 +309,16 @@ bool update_logic(float dt, State& world_data) {
                 avoid_force = ahead - collide.pos;
               }
             }
-            desired_vel += avoid_force;
+            desired_force += avoid_force;
           }
 
           // arrival
           if(dist < SLOWING_RADIUS){
             auto slowing_amount = clamp(dist / SLOWING_RADIUS, 0.1f, 1.0f);
-            desired_vel *= slowing_amount;
+            desired_force *= slowing_amount;
           }
 
-          auto steering_force = truncate(desired_vel - worker.vel, MAX_FORCE);
+          auto steering_force = truncate(desired_force, MAX_FORCE);
           auto steering_vel = steering_force / MOB_MASS;
           worker.vel = truncate(worker.vel + steering_vel, MOB_SPEED);
           // down right up left
