@@ -66,17 +66,18 @@ struct Renderable {
   int facing_idx;
   int cur_frame_idx;
   float cur_frame_tick_count;
+  uint8 alpha;
 };
 
 struct Task {
-  vec2 position;
+  int entity_idx;
   enum class Chore {
     IDLE,
     BUILD_CHAIR
   } chore;
 
   Task() : chore(Chore::IDLE) {}
-  Task(vec2 p, Chore c) : position{p}, chore{c} {}
+  Task(int idx, Chore c) : entity_idx{idx}, chore{c} {}
 };
 
 struct State {
@@ -86,13 +87,17 @@ struct State {
   unordered_map<int, Entity> entities;
   unordered_map<int, Renderable> renderables;
   unordered_map<int, Task> workers;
-  SDL_Renderer* renderer;
-  SDL_Texture* spritesheet;
   vec2 mouse_pos;
   queue<Task> tasks;
   mt19937 mt;
   uniform_real_distribution<float> rand_x;
   uniform_real_distribution<float> rand_y;
+
+  void delete_entity(int entity) {
+    entities.erase(entity);
+    renderables.erase(entity);
+    workers.erase(entity);
+  }
 
   State()
       : is_done{false},
@@ -174,6 +179,14 @@ int make_chair(State& world_data, ivec2 pos) {
   rend.facing_idx = 0;
   rend.cur_frame_idx = 0;
   rend.cur_frame_tick_count = 0;
+  rend.alpha = 255;
+  return new_chair_idx;
+}
+
+int make_chair_plan(State& world_data, ivec2 pos) {
+  auto idx = make_chair(world_data, pos);
+  world_data.renderables[idx].alpha = 20;
+  return idx;
 }
 
 void make_worker_rend(Renderable& rend) {
@@ -191,6 +204,7 @@ void make_worker_rend(Renderable& rend) {
   rend.facing_idx = 0;
   rend.cur_frame_idx = 0;
   rend.cur_frame_tick_count = 0;
+  rend.alpha = 255;
 }
 
 template<typename T>
@@ -226,7 +240,8 @@ bool update_logic(float dt, State& world_data) {
       } break;
       case Action::CLICK: {
         // generate new chair task
-        world_data.tasks.push({world_data.mouse_pos, Task::Chore::BUILD_CHAIR});
+        auto plan_idx = make_chair_plan(world_data, world_data.mouse_pos);
+        world_data.tasks.push({plan_idx, Task::Chore::BUILD_CHAIR});
       } break;
     }
   }
@@ -245,7 +260,7 @@ bool update_logic(float dt, State& world_data) {
       } break;
       case Task::Chore::BUILD_CHAIR: {
         auto& worker = world_data.entities[id];
-        auto target = task.position;
+        auto target = world_data.entities[task.entity_idx].pos;
         auto desired_vel = target - worker.pos;
 
         // collision avoidance
@@ -299,6 +314,7 @@ bool update_logic(float dt, State& world_data) {
         if(dist < ARRIVAL_RADIUS){
           worker.vel = {0,0};
           make_chair(world_data, target);
+          world_data.delete_entity(task.entity_idx);
           task.chore = Task::Chore::IDLE;
         }
       } break;
@@ -320,7 +336,9 @@ void render(State& world_data, SDL_Renderer* renderer,
     ivec2 offset = rend.spritesheet_offset + animation_frame;
     SDL_Rect srcrect{offset.x, offset.y, rend.sprite_width, rend.sprite_height};
     SDL_Rect destrect{(int)entity.pos.x, (int)entity.pos.y, rend.display_width, rend.display_height};
+    SDL_SetTextureAlphaMod(spritesheet, rend.alpha);
     SDL_RenderCopy(renderer, spritesheet, &srcrect, &destrect);
+    SDL_SetTextureAlphaMod(spritesheet, 255);
   }
   SDL_RenderPresent(renderer);
 }
