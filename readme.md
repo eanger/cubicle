@@ -7,3 +7,5 @@ Ideas:
     office themed, "mini game" from eggs
 
 To do:
+* remove all graphics stuff from game state. Whenever we reset the game, just
+  dump the world and start again

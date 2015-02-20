@@ -26,6 +26,16 @@ using namespace glm;
 #define CHAIR_HEIGHT 112
 #define CHAIR_START_PIXEL 574
 
+#define MOB_SPEED 300.0f
+#define MOB_MASS 2.0f
+#define MAX_FORCE 8.0f
+#define MAX_SEE_AHEAD 50
+#define MOB_COLLIDE_SIZE 50
+#define FRICTION_COEFF 10.0f
+#define DISTANCE_PER_FRAME 20
+#define SLOWING_RADIUS 10.0f
+#define ARRIVAL_RADIUS 5.0f
+
 namespace {
 enum class Action {
   LEFT,
@@ -168,7 +178,6 @@ void read_input(State& world_data) {
           } break;
         }
       } break;
-      // event.motion.x,y
       case SDL_MOUSEBUTTONDOWN: {
         world_data.actions.insert(Action::CLICK);
         world_data.mouse_pos = {event.motion.x, event.motion.y};
@@ -226,15 +235,6 @@ T truncate(const T& val, float max_len) {
   return res;
 }
 
-#define MOB_SPEED 300.0f
-#define MOB_MASS 2.0f
-#define MAX_FORCE 8.0f
-#define MAX_SEE_AHEAD 50
-#define MOB_COLLIDE_SIZE 50
-#define FRICTION_COEFF 10.0f
-#define DISTANCE_PER_FRAME 20
-#define SLOWING_RADIUS 10.0f
-#define ARRIVAL_RADIUS 5.0f
 bool update_logic(float dt, State& world_data) {
   for(const auto& action : world_data.actions){
     switch(action){
