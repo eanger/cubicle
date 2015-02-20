@@ -33,10 +33,15 @@ using namespace glm;
 #define MOB_COLLIDE_SIZE 50
 #define FRICTION_COEFF 10.0f
 #define DISTANCE_PER_FRAME 20
-#define SLOWING_RADIUS 10.0f
-#define ARRIVAL_RADIUS 5.0f
+#define SLOWING_RADIUS 30.0f
+#define ARRIVAL_RADIUS 15.0f
+
+#define SCREEN_WIDTH 800
+#define SCREEN_HEIGHT 600
 
 namespace {
+random_device rd;
+
 enum class Action {
   LEFT,
   RIGHT,
@@ -79,55 +84,22 @@ struct State {
   set<Action> actions;
   int next_entity_idx;
   unordered_map<int, Entity> entities;
-  int screen_w, screen_h;
   unordered_map<int, Renderable> renderables;
   unordered_map<int, Task> workers;
   SDL_Renderer* renderer;
   SDL_Texture* spritesheet;
-  random_device rd;
+  vec2 mouse_pos;
+  queue<Task> tasks;
   mt19937 mt;
   uniform_real_distribution<float> rand_x;
   uniform_real_distribution<float> rand_y;
-  vec2 mouse_pos;
-  queue<Task> tasks;
-
-  void clear() {
-    next_entity_idx = 0;
-    entities.clear();
-    renderables.clear();
-    workers.clear();
-    tasks = queue<Task>();
-  }
 
   State()
       : is_done{false},
         next_entity_idx{0},
-        screen_w{800},
-        screen_h{600},
         mt{rd()},
-        rand_x(0, screen_w),
-        rand_y(0, screen_h) {
-    SDL_Init(SDL_INIT_TIMER | SDL_INIT_AUDIO | SDL_INIT_VIDEO | SDL_INIT_EVENTS);
-    auto window = SDL_CreateWindow("game",
-                                   SDL_WINDOWPOS_UNDEFINED,
-                                   SDL_WINDOWPOS_UNDEFINED,
-                                   screen_w,
-                                   screen_h,
-                                   SDL_WINDOW_OPENGL);
-    renderer = SDL_CreateRenderer(window,
-                                  -1 /* first available */,
-                                  SDL_RENDERER_ACCELERATED | SDL_RENDERER_PRESENTVSYNC);
-    auto surf = IMG_Load(get_asset_path("spritesheet.bmp").c_str());
-    if(!surf){
-      cerr << "Bad img load: " << IMG_GetError() << endl;
-      exit(-1);
-    }
-    spritesheet = SDL_CreateTextureFromSurface(renderer, surf);
-    if(!spritesheet){
-      cerr << "Bad convert to texture: " << SDL_GetError() << endl;
-      exit(-1);
-    }
-  }
+        rand_x(0, SCREEN_WIDTH),
+        rand_y(0, SCREEN_HEIGHT) {}
 };
 
 void read_input(State& world_data) {
@@ -239,8 +211,9 @@ bool update_logic(float dt, State& world_data) {
   for(const auto& action : world_data.actions){
     switch(action){
       case Action::RESET: {
-        world_data.clear();
-      } break;
+        world_data = State(); 
+        return false;
+      } break; 
       case Action::SHOOT: {
         // generate new worker
         auto new_worker_idx = world_data.next_entity_idx++;
@@ -335,24 +308,46 @@ bool update_logic(float dt, State& world_data) {
   return world_data.is_done;
 }
 
-void render(State& world_data) {
-  SDL_SetRenderDrawColor(world_data.renderer, 255, 255, 255, 0);
-  SDL_RenderClear(world_data.renderer);
-  for(auto& rend_item : world_data.renderables){
-    auto& entity = world_data.entities[rend_item.first];
-    auto& rend = rend_item.second;
+void render(State& world_data, SDL_Renderer* renderer,
+            SDL_Texture* spritesheet) {
+  SDL_SetRenderDrawColor(renderer, 255, 255, 255, 0);
+  SDL_RenderClear(renderer);
+  for(const auto& rend_item : world_data.renderables){
+    const auto& entity = world_data.entities[rend_item.first];
+    const auto& rend = rend_item.second;
     ivec2 animation_frame(rend.frames[rend.cur_frame_idx],
                           rend.directions[rend.facing_idx]);
     ivec2 offset = rend.spritesheet_offset + animation_frame;
     SDL_Rect srcrect{offset.x, offset.y, rend.sprite_width, rend.sprite_height};
     SDL_Rect destrect{(int)entity.pos.x, (int)entity.pos.y, rend.display_width, rend.display_height};
-    SDL_RenderCopy(world_data.renderer, world_data.spritesheet, &srcrect, &destrect);
+    SDL_RenderCopy(renderer, spritesheet, &srcrect, &destrect);
   }
-  SDL_RenderPresent(world_data.renderer);
+  SDL_RenderPresent(renderer);
 }
 }
 
 int main(int argc, char** argv) {
+  SDL_Init(SDL_INIT_TIMER | SDL_INIT_AUDIO | SDL_INIT_VIDEO | SDL_INIT_EVENTS);
+  auto window = SDL_CreateWindow("Cubicle: Get To Work",
+                                 SDL_WINDOWPOS_UNDEFINED,
+                                 SDL_WINDOWPOS_UNDEFINED,
+                                 SCREEN_WIDTH,
+                                 SCREEN_HEIGHT,
+                                 SDL_WINDOW_OPENGL);
+  auto renderer =
+      SDL_CreateRenderer(window, -1 /* first available */,
+                         SDL_RENDERER_ACCELERATED | SDL_RENDERER_PRESENTVSYNC);
+  auto surf = IMG_Load(get_asset_path("spritesheet.bmp").c_str());
+  if(!surf){
+    cerr << "Bad img load: " << IMG_GetError() << endl;
+    exit(-1);
+  }
+  auto spritesheet = SDL_CreateTextureFromSurface(renderer, surf);
+  if(!spritesheet){
+    cerr << "Bad convert to texture: " << SDL_GetError() << endl;
+    exit(-1);
+  }
+
   bool done = false;
   State world_data;
   time_point<high_resolution_clock> last_clock_time = high_resolution_clock::now();
@@ -362,7 +357,7 @@ int main(int argc, char** argv) {
     duration<float> elapsed = time - last_clock_time;
     last_clock_time = time;
     done = update_logic(elapsed.count(), world_data);
-    render(world_data);
+    render(world_data, renderer, spritesheet);
   }
   cout << "Game over\n";
   return 0;

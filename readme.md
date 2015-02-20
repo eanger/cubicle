@@ -7,5 +7,7 @@ Ideas:
     office themed, "mini game" from eggs
 
 To do:
-* remove all graphics stuff from game state. Whenever we reset the game, just
-  dump the world and start again
+* on click, build a ghostly chair-plan object, that the BUILD\_CHAIR task
+  converts into a real chair
+* timer that the worker is working before the chair is built. Maybe make the
+  chair slowly become less faded out as its made
