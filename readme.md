@@ -7,5 +7,5 @@ Ideas:
     office themed, "mini game" from eggs
 
 To do:
-* timer that the worker is working before the chair is built. Maybe make the
-  chair slowly become less faded out as its made
+* workers oscillate when they can't reach a target that's too close to a collideable
+

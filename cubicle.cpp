@@ -4,6 +4,7 @@
 #include <cmath>
 #include <iostream>
 #include <iterator>
+#include <limits>
 #include <queue>
 #include <random>
 #include <set>
@@ -28,16 +29,18 @@ using namespace glm;
 
 #define MOB_SPEED 300.0f
 #define MOB_MASS 2.0f
-#define MAX_FORCE 8.0f
-#define MAX_SEE_AHEAD 50
-#define MOB_COLLIDE_SIZE 50
-#define FRICTION_COEFF 10.0f
+#define MAX_FORCE 10.0f
+#define MAX_SEE_AHEAD 35
+#define MOB_COLLIDE_SIZE 30
 #define DISTANCE_PER_FRAME 20
-#define SLOWING_RADIUS 30.0f
+#define SLOWING_RADIUS 20.0f
 #define ARRIVAL_RADIUS 15.0f
 
 #define SCREEN_WIDTH 800
 #define SCREEN_HEIGHT 600
+
+#define CHAIR_BUILD_TIME 2.0f
+#define CHAIR_PLAN_ALPHA 20
 
 namespace {
 random_device rd;
@@ -71,13 +74,19 @@ struct Renderable {
 
 struct Task {
   int entity_idx;
+  float required_time;
+  float time_worked_on;
   enum class Chore {
     IDLE,
     BUILD_CHAIR
   } chore;
 
-  Task() : chore(Chore::IDLE) {}
-  Task(int idx, Chore c) : entity_idx{idx}, chore{c} {}
+  Task()
+      : required_time{numeric_limits<float>::infinity()},
+        time_worked_on{0},
+        chore(Chore::IDLE) {}
+  Task(int idx, float t, Chore c)
+      : entity_idx{idx}, required_time{t}, time_worked_on{0}, chore{c} {}
 };
 
 struct State {
@@ -188,7 +197,7 @@ int make_chair(State& world_data, ivec2 pos) {
 
 int make_chair_plan(State& world_data, ivec2 pos) {
   auto idx = make_chair(world_data, pos);
-  world_data.renderables[idx].alpha = 20;
+  world_data.renderables[idx].alpha = CHAIR_PLAN_ALPHA;
   world_data.collideables.erase(idx);
   return idx;
 }
@@ -246,7 +255,7 @@ bool update_logic(float dt, State& world_data) {
       case Action::CLICK: {
         // generate new chair task
         auto plan_idx = make_chair_plan(world_data, world_data.mouse_pos);
-        world_data.tasks.push({plan_idx, Task::Chore::BUILD_CHAIR});
+        world_data.tasks.push({plan_idx, CHAIR_BUILD_TIME, Task::Chore::BUILD_CHAIR});
       } break;
     }
   }
@@ -266,60 +275,68 @@ bool update_logic(float dt, State& world_data) {
       case Task::Chore::BUILD_CHAIR: {
         auto& worker = world_data.entities[id];
         auto target = world_data.entities[task.entity_idx].pos;
-        auto desired_vel = target - worker.pos;
-
-        // collision avoidance
-        if(isNonZero(worker.vel)){
-          auto ahead = worker.pos + truncate(worker.vel, MAX_SEE_AHEAD);
-          float closest = MAX_SEE_AHEAD;
-          vec2 avoid_force;
-          for(const auto& collide_idx : world_data.collideables){
-            const auto& collide = world_data.entities[collide_idx];
-            if(collide_idx == id){ continue; }
-            if(length(ahead - collide.pos) > MOB_COLLIDE_SIZE){ continue; }
-            if(distance(worker.pos, collide.pos) < closest){
-              closest = distance(worker.pos, collide.pos);
-              avoid_force = ahead - collide.pos;
-            }
-          }
-          desired_vel += avoid_force;
-        }
-
-        // arrival
         auto dist = distance(worker.pos, target);
         assert(!isnan(dist) && "invalid distance between worker and target");
-        if(dist < SLOWING_RADIUS){
-          auto slowing_amount = clamp(dist / SLOWING_RADIUS, 0.1f, 1.0f);
-          desired_vel *= slowing_amount;
-        }
-
-        auto steering_force = truncate(desired_vel - worker.vel, MAX_FORCE);
-        auto steering_vel = steering_force / MOB_MASS;
-        worker.vel = truncate(worker.vel + steering_vel, MOB_SPEED);
-        // down right up left
-        float dot_prods[4] = {dot(worker.vel, {0, 1}),  dot(worker.vel, {1, 0}),
-                              dot(worker.vel, {0, -1}), dot(worker.vel, {-1, 0})};
-        auto max_elem = max_element(begin(dot_prods), end(dot_prods));
-        auto facing_idx = std::distance(begin(dot_prods), max_elem);
-        if(isNonZero(worker.vel)){
-          auto& rend = world_data.renderables[id];
-          rend.facing_idx = facing_idx;
-          rend.cur_frame_tick_count += length(worker.vel * dt);
-          if(rend.cur_frame_tick_count >= DISTANCE_PER_FRAME){
-            if(rend.cur_frame_idx == rend.frames.size() - 1){
-              rend.cur_frame_idx = 0;
-            } else {
-              ++rend.cur_frame_idx;
-            }
-            rend.cur_frame_tick_count = 0;
-          }
-        }  
-        worker.pos += worker.vel * dt;
         if(dist < ARRIVAL_RADIUS){
           worker.vel = {0,0};
-          make_chair(world_data, target);
-          world_data.delete_entity(task.entity_idx);
-          task.chore = Task::Chore::IDLE;
+          task.time_worked_on += dt;
+          float percent_done = task.time_worked_on / task.required_time;
+          if(percent_done >= 1.0f){ 
+            make_chair(world_data, target);
+            world_data.delete_entity(task.entity_idx);
+            task.chore = Task::Chore::IDLE;
+          } else {
+            auto& rend = world_data.renderables[task.entity_idx];
+            rend.alpha = mix(CHAIR_PLAN_ALPHA, 255, percent_done);
+          }
+        } else {
+          auto desired_vel = target - worker.pos;
+
+          // collision avoidance
+          if(isNonZero(worker.vel)){
+            auto ahead = worker.pos + truncate(worker.vel, MAX_SEE_AHEAD);
+            float closest = MAX_SEE_AHEAD;
+            vec2 avoid_force;
+            for(const auto& collide_idx : world_data.collideables){
+              const auto& collide = world_data.entities[collide_idx];
+              if(collide_idx == id){ continue; }
+              if(length(ahead - collide.pos) > MOB_COLLIDE_SIZE){ continue; }
+              if(distance(worker.pos, collide.pos) < closest){
+                closest = distance(worker.pos, collide.pos);
+                avoid_force = ahead - collide.pos;
+              }
+            }
+            desired_vel += avoid_force;
+          }
+
+          // arrival
+          if(dist < SLOWING_RADIUS){
+            auto slowing_amount = clamp(dist / SLOWING_RADIUS, 0.1f, 1.0f);
+            desired_vel *= slowing_amount;
+          }
+
+          auto steering_force = truncate(desired_vel - worker.vel, MAX_FORCE);
+          auto steering_vel = steering_force / MOB_MASS;
+          worker.vel = truncate(worker.vel + steering_vel, MOB_SPEED);
+          // down right up left
+          float dot_prods[4] = {dot(worker.vel, {0, 1}),  dot(worker.vel, {1, 0}),
+                                dot(worker.vel, {0, -1}), dot(worker.vel, {-1, 0})};
+          auto max_elem = max_element(begin(dot_prods), end(dot_prods));
+          auto facing_idx = std::distance(begin(dot_prods), max_elem);
+          if(isNonZero(worker.vel)){
+            auto& rend = world_data.renderables[id];
+            rend.facing_idx = facing_idx;
+            rend.cur_frame_tick_count += length(worker.vel * dt);
+            if(rend.cur_frame_tick_count >= DISTANCE_PER_FRAME){
+              if(rend.cur_frame_idx == rend.frames.size() - 1){
+                rend.cur_frame_idx = 0;
+              } else {
+                ++rend.cur_frame_idx;
+              }
+              rend.cur_frame_tick_count = 0;
+            }
+          }  
+          worker.pos += worker.vel * dt;
         }
       } break;
     }
