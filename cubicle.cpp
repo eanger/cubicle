@@ -56,7 +56,9 @@ enum class Action {
   DOWN,
   SHOOT,
   CLICK,
-  RESET
+  RESET,
+  ZOOM_IN,
+  ZOOM_OUT
 };
 
 struct Entity {
@@ -104,6 +106,7 @@ struct State {
   unordered_set<int> collideables;
   vec2 mouse_pos;
   queue<Task> tasks;
+  float zoom_ratio;
 
   void delete_entity(int entity) {
     entities.erase(entity);
@@ -112,7 +115,7 @@ struct State {
     collideables.erase(entity);
   }
 
-  State() : is_done{false}, next_entity_idx{1} {}
+  State() : is_done{false}, next_entity_idx{1}, zoom_ratio{1.0f} {}
 };
 
 void readInput(State& world_data) {
@@ -165,7 +168,15 @@ void readInput(State& world_data) {
       } break;
       case SDL_MOUSEBUTTONDOWN: {
         world_data.actions.insert(Action::CLICK);
-        world_data.mouse_pos = {event.motion.x, event.motion.y};
+        world_data.mouse_pos = {event.motion.x / world_data.zoom_ratio,
+                                event.motion.y / world_data.zoom_ratio};
+      } break;
+      case SDL_MOUSEWHEEL: {
+        if(event.wheel.y > 0){
+          world_data.actions.insert(Action::ZOOM_IN);
+        } else {
+          world_data.actions.insert(Action::ZOOM_OUT);
+        }
       } break;
     }
   }
@@ -335,6 +346,12 @@ bool updateLogic(float dt, State& world_data) {
         auto plan_idx = makeChairPlan(world_data, chair_pos);
         world_data.tasks.push({plan_idx, CHAIR_BUILD_TIME, Task::Chore::BUILD_CHAIR});
       } break;
+      case Action::ZOOM_IN: {
+        world_data.zoom_ratio *= 1.25f;
+      } break;
+      case Action::ZOOM_OUT: {
+        world_data.zoom_ratio /= 1.25f;
+      } break;
     }
   }
   world_data.actions.clear();
@@ -394,7 +411,10 @@ void render(State& world_data, SDL_Renderer* renderer,
                           rend.directions[rend.facing_idx]);
     ivec2 offset = rend.spritesheet_offset + animation_frame;
     SDL_Rect srcrect{offset.x, offset.y, rend.sprite_width, rend.sprite_height};
-    SDL_Rect destrect{(int)entity.pos.x, (int)entity.pos.y, rend.display_width, rend.display_height};
+    SDL_Rect destrect{(int)(entity.pos.x * world_data.zoom_ratio),
+                      (int)(entity.pos.y * world_data.zoom_ratio),
+                      (int)(rend.display_width * world_data.zoom_ratio),
+                      (int)(rend.display_height * world_data.zoom_ratio)};
     SDL_SetTextureAlphaMod(spritesheet, rend.alpha);
     SDL_RenderCopy(renderer, spritesheet, &srcrect, &destrect);
     SDL_SetTextureAlphaMod(spritesheet, 255);
