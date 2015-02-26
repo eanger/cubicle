@@ -26,6 +26,7 @@ using namespace glm;
 #define CHAIR_WIDTH 124
 #define CHAIR_HEIGHT 112
 #define CHAIR_START_PIXEL 574
+#define GRID_SQUARE_SIZE 30
 
 #define MOB_SPEED 200.0f
 #define MOB_MASS 5.0f
@@ -60,7 +61,8 @@ enum class Action {
   CLICK,
   RESET,
   ZOOM_IN,
-  ZOOM_OUT
+  ZOOM_OUT,
+  SELECT_CHAIR
 };
 
 struct Entity {
@@ -110,6 +112,7 @@ struct State {
   queue<Task> tasks;
   float zoom_ratio;
   vec2 camera;
+  int brush_id;
 
   void delete_entity(int entity) {
     entities.erase(entity);
@@ -122,7 +125,8 @@ struct State {
       : is_done{false},
         next_entity_idx{1},
         zoom_ratio{1.0f},
-        camera{0} {}
+        camera{0},
+        brush_id{0} {}
 };
 
 void readInput(State& world_data) {
@@ -155,6 +159,9 @@ void readInput(State& world_data) {
           case SDLK_r: {
             world_data.actions.insert(Action::RESET);
           } break;
+          case SDLK_1: {
+            world_data.actions.insert(Action::SELECT_CHAIR);
+          } break;
         }
       } break;
       case SDL_KEYUP: {
@@ -175,8 +182,6 @@ void readInput(State& world_data) {
       } break;
       case SDL_MOUSEBUTTONDOWN: {
         world_data.actions.insert(Action::CLICK);
-        world_data.mouse_pos = vec2{event.motion.x / world_data.zoom_ratio,
-                                event.motion.y / world_data.zoom_ratio} + world_data.camera;
       } break;
       case SDL_MOUSEWHEEL: {
         if(event.wheel.y > 0){
@@ -184,6 +189,11 @@ void readInput(State& world_data) {
         } else {
           world_data.actions.insert(Action::ZOOM_OUT);
         }
+      } break;
+      case SDL_MOUSEMOTION: {
+        world_data.mouse_pos = vec2{event.motion.x / world_data.zoom_ratio,
+                                    event.motion.y / world_data.zoom_ratio} + 
+                               world_data.camera;
       } break;
     }
   }
@@ -195,9 +205,9 @@ int makeChair(State& world_data, ivec2 pos) {
   new_chair.pos = pos;
   new_chair.vel = {0,0};
   auto& rend = world_data.renderables[new_chair_idx];
-  rend.display_width = GUY_WIDTH;
+  rend.display_width = GRID_SQUARE_SIZE;
   rend.sprite_width = CHAIR_WIDTH;
-  rend.display_height = GUY_HEIGHT;
+  rend.display_height = GRID_SQUARE_SIZE;
   rend.sprite_height = CHAIR_HEIGHT;
   rend.spritesheet_offset = {CHAIR_START_PIXEL, 0};
   rend.directions.emplace_back(0);
@@ -359,11 +369,13 @@ bool updateLogic(float dt, State& world_data) {
       } break;
       case Action::CLICK: {
         // generate new chair task
-        auto chair_pos = world_data.mouse_pos;
-        chair_pos.x -= GUY_WIDTH / 2;
-        chair_pos.y -= GUY_HEIGHT / 2;
-        auto plan_idx = makeChairPlan(world_data, chair_pos);
-        world_data.tasks.push({plan_idx, CHAIR_BUILD_TIME, Task::Chore::BUILD_CHAIR});
+        if(world_data.brush_id != 0){
+          auto chair_pos = world_data.mouse_pos;
+          chair_pos.x -= GRID_SQUARE_SIZE / 2;
+          chair_pos.y -= GRID_SQUARE_SIZE / 2;
+          world_data.tasks.push({world_data.brush_id, CHAIR_BUILD_TIME, Task::Chore::BUILD_CHAIR});
+          world_data.brush_id = makeChairPlan(world_data, chair_pos);
+        }
       } break;
       case Action::ZOOM_IN: {
         world_data.zoom_ratio *= 1.25f;
@@ -371,9 +383,23 @@ bool updateLogic(float dt, State& world_data) {
       case Action::ZOOM_OUT: {
         world_data.zoom_ratio /= 1.25f;
       } break;
+      case Action::SELECT_CHAIR: {
+        if(world_data.brush_id == 0){
+          world_data.brush_id =  makeChairPlan(world_data, world_data.mouse_pos);
+        } else { 
+          world_data.delete_entity(world_data.brush_id);
+          world_data.brush_id = 0;
+        }
+      } break;
     }
   }
   world_data.actions.clear();
+
+  // update brush position
+  if(world_data.brush_id != 0){
+    auto& ent = world_data.entities[world_data.brush_id];
+    ent.pos = world_data.mouse_pos - mod(world_data.mouse_pos, (float) GRID_SQUARE_SIZE);
+  }
 
   for(auto& worker_iter : world_data.workers){
     const auto& id = worker_iter.first;
