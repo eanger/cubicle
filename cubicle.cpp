@@ -46,6 +46,8 @@ using namespace glm;
 #define IDLE_TASK_MAX_TIME 1.0f
 #define MAX_WANDER_DIST 10.0f
 
+#define SCROLL_SPEED 20 
+
 namespace {
 random_device rd;
 
@@ -107,6 +109,7 @@ struct State {
   vec2 mouse_pos;
   queue<Task> tasks;
   float zoom_ratio;
+  vec2 camera;
 
   void delete_entity(int entity) {
     entities.erase(entity);
@@ -115,7 +118,11 @@ struct State {
     collideables.erase(entity);
   }
 
-  State() : is_done{false}, next_entity_idx{1}, zoom_ratio{1.0f} {}
+  State()
+      : is_done{false},
+        next_entity_idx{1},
+        zoom_ratio{1.0f},
+        camera{0} {}
 };
 
 void readInput(State& world_data) {
@@ -168,8 +175,8 @@ void readInput(State& world_data) {
       } break;
       case SDL_MOUSEBUTTONDOWN: {
         world_data.actions.insert(Action::CLICK);
-        world_data.mouse_pos = {event.motion.x / world_data.zoom_ratio,
-                                event.motion.y / world_data.zoom_ratio};
+        world_data.mouse_pos = vec2{event.motion.x / world_data.zoom_ratio,
+                                event.motion.y / world_data.zoom_ratio} + world_data.camera;
       } break;
       case SDL_MOUSEWHEEL: {
         if(event.wheel.y > 0){
@@ -322,6 +329,18 @@ void makeIdleTask(State& world_data, Task& task, Entity& worker) {
 bool updateLogic(float dt, State& world_data) {
   for(const auto& action : world_data.actions){
     switch(action){
+      case Action::LEFT: {
+        world_data.camera.x -= SCROLL_SPEED;
+      } break;
+      case Action::RIGHT: {
+        world_data.camera.x += SCROLL_SPEED;
+      } break;
+      case Action::UP: {
+        world_data.camera.y -= SCROLL_SPEED;
+      } break;
+      case Action::DOWN: {
+        world_data.camera.y += SCROLL_SPEED;
+      } break;
       case Action::RESET: {
         world_data = State(); 
         return false;
@@ -411,8 +430,9 @@ void render(State& world_data, SDL_Renderer* renderer,
                           rend.directions[rend.facing_idx]);
     ivec2 offset = rend.spritesheet_offset + animation_frame;
     SDL_Rect srcrect{offset.x, offset.y, rend.sprite_width, rend.sprite_height};
-    SDL_Rect destrect{(int)(entity.pos.x * world_data.zoom_ratio),
-                      (int)(entity.pos.y * world_data.zoom_ratio),
+    auto screen_pos = (entity.pos - world_data.camera) * world_data.zoom_ratio;
+    SDL_Rect destrect{(int)screen_pos.x,
+                      (int)screen_pos.y,
                       (int)(rend.display_width * world_data.zoom_ratio),
                       (int)(rend.display_height * world_data.zoom_ratio)};
     SDL_SetTextureAlphaMod(spritesheet, rend.alpha);
