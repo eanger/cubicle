@@ -108,6 +108,7 @@ struct State {
   unordered_map<int, Renderable> renderables;
   unordered_map<int, Task> workers;
   unordered_set<int> collideables;
+  vector<vec2> occupied_locations;
   vec2 mouse_pos;
   queue<Task> tasks;
   float zoom_ratio;
@@ -115,10 +116,19 @@ struct State {
   int brush_id;
 
   void delete_entity(int entity) {
+    if(collideables.find(entity) != end(collideables)){
+      const auto& pos = entities[entity].pos;
+      const auto& collide = find(begin(occupied_locations),
+                                 end(occupied_locations),
+                                 pos);
+      if(collide != end(occupied_locations)){
+        occupied_locations.erase(collide);
+      }
+    }
+    collideables.erase(entity);
     entities.erase(entity);
     renderables.erase(entity);
     workers.erase(entity);
-    collideables.erase(entity);
   }
 
   State()
@@ -199,7 +209,7 @@ void readInput(State& world_data) {
   }
 }
 
-int makeChair(State& world_data, ivec2 pos) {
+int makeChairPlan(State& world_data, ivec2 pos) {
   auto new_chair_idx = world_data.next_entity_idx++;
   auto& new_chair = world_data.entities[new_chair_idx];
   new_chair.pos = pos;
@@ -215,16 +225,19 @@ int makeChair(State& world_data, ivec2 pos) {
   rend.facing_idx = 0;
   rend.cur_frame_idx = 0;
   rend.cur_frame_tick_count = 0;
-  rend.alpha = 255;
-  world_data.collideables.insert(new_chair_idx);
+  rend.alpha = CHAIR_PLAN_ALPHA;
+
   return new_chair_idx;
 }
 
-int makeChairPlan(State& world_data, ivec2 pos) {
-  auto idx = makeChair(world_data, pos);
-  world_data.renderables[idx].alpha = CHAIR_PLAN_ALPHA;
-  world_data.collideables.erase(idx);
-  return idx;
+int makeChair(State& world_data, ivec2 pos) {
+  auto new_chair_idx = makeChairPlan(world_data, pos);
+  auto& rend = world_data.renderables[new_chair_idx];
+  rend.alpha = 255;
+  const auto& ent = world_data.entities[new_chair_idx];
+  world_data.collideables.insert(new_chair_idx);
+  world_data.occupied_locations.push_back(ent.pos);
+  return new_chair_idx;
 }
 
 void makeWorkerRend(Renderable& rend) {
@@ -272,24 +285,6 @@ void moveTowardsTarget(State& world_data, int worker_idx, vec2& target, float dt
   if(isNonZero(target - worker.pos)){
     desired_vel = normalize(target - worker.pos);
   }
-
-  /*
-  if(isNonZero(worker.vel)){
-    auto ahead = worker.pos + truncate(worker.vel, MAX_SEE_AHEAD);
-    float closest = MAX_SEE_AHEAD;
-    vec2 avoid_force(0);
-    for(const auto& collide_idx : world_data.collideables){
-      const auto& collide = world_data.entities[collide_idx];
-      if(collide_idx == worker_idx){ continue; }
-      if(length(ahead - collide.pos) > MOB_COLLIDE_SIZE){ continue; }
-      if(distance(worker.pos, collide.pos) < closest){
-        closest = distance(worker.pos, collide.pos);
-        avoid_force = ahead - collide.pos;
-      }
-    }
-    desired_force += avoid_force;
-  }
-  */
 
   // arrival
   auto dist = distance(worker.pos, target);
@@ -340,6 +335,14 @@ void makeIdleTask(State& world_data, Task& task, Entity& worker) {
                                        worker.pos.y + MAX_WANDER_DIST)};
 }
 
+bool isOccupied(const State& world_data, const vec2& pos) {
+  auto grid_location = pos - mod(pos, (float) GRID_SQUARE_SIZE);
+  return find(begin(world_data.occupied_locations),
+              end(world_data.occupied_locations),
+              grid_location) 
+         != end(world_data.occupied_locations);
+}
+
 bool updateLogic(float dt, State& world_data) {
   for(const auto& action : world_data.actions){
     switch(action){
@@ -369,11 +372,10 @@ bool updateLogic(float dt, State& world_data) {
         auto& new_worker_rend = world_data.renderables[new_worker_idx];
         makeWorkerRend(new_worker_rend);
         world_data.workers[new_worker_idx];
-        world_data.collideables.insert(new_worker_idx);
       } break;
       case Action::CLICK: {
         // generate new chair task
-        if(world_data.brush_id != 0){
+        if(world_data.brush_id != 0 && !isOccupied(world_data, world_data.mouse_pos)){
           auto chair_pos = world_data.mouse_pos;
           chair_pos.x -= GRID_SQUARE_SIZE / 2;
           chair_pos.y -= GRID_SQUARE_SIZE / 2;

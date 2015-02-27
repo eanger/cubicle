@@ -7,3 +7,7 @@ To do:
 * Prevent chairs from being placed on top of each other.
     Maybe zones can be painted on for irregular shapes, using flood fill or something similar.
     We might need to search grid space using something like a quadtree.
+* Units have a bounding box for collision? To prevent placing objects on top of other objects (ie can only place if no collision)
+* merge collideables and occupied locations so that they're kept in sync?
+* Change blend for brush only when it's hovering over a location that's occupied
+* Make it so you can't build a chair plan over top of another chair plan
