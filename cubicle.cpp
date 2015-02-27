@@ -28,7 +28,7 @@ using namespace glm;
 #define CHAIR_START_PIXEL 574
 #define GRID_SQUARE_SIZE 30
 
-#define MOB_SPEED 200.0f
+#define MAX_SPEED 200.0f
 #define MOB_MASS 5.0f
 #define MAX_FORCE 20.0f
 #define MAX_SEE_AHEAD 35
@@ -268,12 +268,12 @@ float getRandInRange(float start, float end) {
 
 void moveTowardsTarget(State& world_data, int worker_idx, vec2& target, float dt) {
   auto& worker = world_data.entities[worker_idx];
-  auto desired_force = vec2{0};
+  auto desired_vel = vec2{0};
   if(isNonZero(target - worker.pos)){
-    desired_force = normalize(target - worker.pos) * MAX_FORCE;
+    desired_vel = normalize(target - worker.pos);
   }
 
-  // collision avoidance
+  /*
   if(isNonZero(worker.vel)){
     auto ahead = worker.pos + truncate(worker.vel, MAX_SEE_AHEAD);
     float closest = MAX_SEE_AHEAD;
@@ -289,17 +289,21 @@ void moveTowardsTarget(State& world_data, int worker_idx, vec2& target, float dt
     }
     desired_force += avoid_force;
   }
+  */
 
   // arrival
   auto dist = distance(worker.pos, target);
   if(dist < SLOWING_RADIUS){
-    auto slowing_amount = clamp(dist / SLOWING_RADIUS, 0.1f, 1.0f);
-    desired_force *= slowing_amount;
+    auto slowing_amount = mix(0.0f, MAX_SPEED, dist / SLOWING_RADIUS);
+    desired_vel *= slowing_amount;
+  } else {
+    desired_vel *= MAX_SPEED;
   }
+  
+  auto desired_force = desired_vel - worker.vel;
+  auto steering = truncate(desired_force, MAX_FORCE);
+  worker.vel += steering / MOB_MASS;
 
-  auto steering_force = truncate(desired_force, MAX_FORCE);
-  auto steering_vel = steering_force / MOB_MASS;
-  worker.vel = truncate(worker.vel + steering_vel, MOB_SPEED);
   // down right up left
   float dot_prods[4] = {dot(worker.vel, {0, 1}),  dot(worker.vel, {1, 0}),
                         dot(worker.vel, {0, -1}), dot(worker.vel, {-1, 0})};
