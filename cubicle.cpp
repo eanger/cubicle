@@ -52,6 +52,21 @@ using namespace glm;
 namespace {
 random_device rd;
 
+struct PathNode {
+  vec2 pos;
+  vec2 parent;
+  float heuristic;
+  float movement_cost;
+  bool operator>(const PathNode& p) {
+    return heuristic + movement_cost > p.heuristic + p.movement_cost;
+  }
+};
+
+void getPath(vec2 start) {
+  priority_queue<PathNode, vector<PathNode>, greater<PathNode>> open;
+
+}
+
 enum class Action {
   LEFT,
   RIGHT,
