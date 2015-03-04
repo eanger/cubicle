@@ -52,21 +52,6 @@ using namespace glm;
 namespace {
 random_device rd;
 
-struct PathNode {
-  vec2 pos;
-  vec2 parent;
-  float heuristic;
-  float movement_cost;
-  bool operator>(const PathNode& p) {
-    return heuristic + movement_cost > p.heuristic + p.movement_cost;
-  }
-};
-
-void getPath(vec2 start) {
-  priority_queue<PathNode, vector<PathNode>, greater<PathNode>> open;
-
-}
-
 enum class Action {
   LEFT,
   RIGHT,
@@ -292,6 +277,92 @@ float getRandInRange(float start, float end) {
   static mt19937 mt{rd()};
   uniform_real_distribution<float> rand{start, end};
   return rand(mt);
+}
+
+struct PathNode {
+  vec2 pos;
+  PathNode* parent;
+  float heuristic;
+  float movement_cost;
+  bool operator>(const PathNode& p) const {
+    return heuristic + movement_cost > p.heuristic + p.movement_cost;
+  }
+  bool operator==(const PathNode& p) const {
+    return pos == p.pos;
+  }
+  PathNode(vec2 pos, float movement_cost, vec2 target, PathNode* parent)
+      : pos{pos}, movement_cost{movement_cost} {
+    // calculate heuristic cost
+    heuristic = length(target - pos);
+  }
+};
+
+// TODO might require less naive version of sorted insert. It would be more
+// like implementing our own priority queue, but iteratable
+void addNeighbor(vector<PathNode>& open, const PathNode& neighbor) {
+  auto elem = begin(open);
+  for(; elem != end(open); ++elem){
+    if(neighbor > *elem) {
+      break;
+    }
+  }
+  open.insert(elem, neighbor);
+}
+
+// TODO should probably be integer indexes, not float
+const vector<vec2> possible_positions = {
+  {-1,-1}, {0 ,-1}, {1 ,-1},
+  {-1, 0}, {0 , 0}, {1 , 0},
+  {-1, 1}, {0 , 1}, {1 , 1}};
+
+vector<vec2> getPath(const State& world_data, vec2 start, vec2 target) {
+  vector<vec2> path;
+  if(start == target) {
+    return path;
+  }
+
+  // the open list is ordered by DECREASING cost (movement_cost + heuristic)
+  vector<PathNode> open, closed;
+
+  open.emplace_back(start, 0, target, nullptr);
+  bool done = false;
+  PathNode* final_node = nullptr;
+  while(!final_node && !open.empty()){
+    closed.push_back(open.back());
+    auto current_node = closed.back();
+    open.pop_back();
+    for(const auto& p : possible_positions){
+      auto neighbor_pos = current_node.pos + p;
+      // neighbor is the target, so we're done
+      if(neighbor_pos == target){
+        final_node = &current_node;
+        break;
+      }
+      // check for reachability
+      if (find(begin(world_data.occupied_locations),
+               end(world_data.occupied_locations),
+               neighbor_pos) != end(world_data.occupied_locations)) {
+        continue;
+      }
+      PathNode neighbor(neighbor_pos, length(p), target, &current_node);
+      // check if already on open list
+      auto elem = find(begin(open), end(open), neighbor);
+      if(elem != end(open)){
+        open.erase(elem);
+        // TODO update movement cost
+        // neighbor.movement_cost = ???;
+      }
+      addNeighbor(open, neighbor);
+    }
+  }
+  // add target to last pos in path
+  path.push_back(target);
+  // reconstruct path
+  while(final_node){
+    path.push_back(final_node->pos);
+    final_node = final_node->parent;
+  }
+  return path;
 }
 
 void moveTowardsTarget(State& world_data, int worker_idx, vec2& target, float dt) {
