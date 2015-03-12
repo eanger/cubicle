@@ -139,6 +139,10 @@ struct State {
         brush_id{0} {}
 };
 
+vec2 posToGridPos(vec2 pos) {
+  return pos - mod(pos, (float) GRID_SQUARE_SIZE);
+}
+
 void readInput(State& world_data) {
   SDL_Event event;
   while(SDL_PollEvent(&event)){
@@ -291,7 +295,7 @@ struct PathNode {
     return pos == p.pos;
   }
   PathNode(vec2 pos, float movement_cost, vec2 target, PathNode* parent)
-      : pos{pos}, movement_cost{movement_cost} {
+      : pos{pos}, movement_cost{movement_cost}, parent{parent} {
     // calculate heuristic cost
     heuristic = length(target - pos);
   }
@@ -311,12 +315,14 @@ void addNeighbor(vector<PathNode>& open, const PathNode& neighbor) {
 
 // TODO should probably be integer indexes, not float
 const vector<vec2> possible_positions = {
-  {-1,-1}, {0 ,-1}, {1 ,-1},
-  {-1, 0}, {0 , 0}, {1 , 0},
-  {-1, 1}, {0 , 1}, {1 , 1}};
+  {-GRID_SQUARE_SIZE,-GRID_SQUARE_SIZE}, {0 ,-GRID_SQUARE_SIZE}, {GRID_SQUARE_SIZE ,-GRID_SQUARE_SIZE},
+  {-GRID_SQUARE_SIZE, 0}, {GRID_SQUARE_SIZE , 0},
+  {-GRID_SQUARE_SIZE, GRID_SQUARE_SIZE}, {0 , GRID_SQUARE_SIZE}, {GRID_SQUARE_SIZE , GRID_SQUARE_SIZE}};
 
 vector<vec2> getPath(const State& world_data, vec2 start, vec2 target) {
   vector<vec2> path;
+  start = posToGridPos(start);
+  target = posToGridPos(target);
   if(start == target) {
     return path;
   }
@@ -329,7 +335,7 @@ vector<vec2> getPath(const State& world_data, vec2 start, vec2 target) {
   PathNode* final_node = nullptr;
   while(!final_node && !open.empty()){
     closed.push_back(open.back());
-    auto current_node = closed.back();
+    auto& current_node = closed.back();
     open.pop_back();
     for(const auto& p : possible_positions){
       auto neighbor_pos = current_node.pos + p;
@@ -345,12 +351,20 @@ vector<vec2> getPath(const State& world_data, vec2 start, vec2 target) {
         continue;
       }
       PathNode neighbor(neighbor_pos, length(p), target, &current_node);
+      // check if already on closed list
+      auto closed_elem = find(begin(closed), end(closed), neighbor);
+      if(closed_elem != end(closed)){
+        continue;
+      }
       // check if already on open list
-      auto elem = find(begin(open), end(open), neighbor);
-      if(elem != end(open)){
-        open.erase(elem);
-        // TODO update movement cost
-        // neighbor.movement_cost = ???;
+      auto open_elem = find(begin(open), end(open), neighbor);
+      if(open_elem != end(open)){
+        if(open_elem->movement_cost > current_node.movement_cost + length(neighbor.pos - current_node.pos)) {
+          open.erase(open_elem);
+          neighbor.movement_cost = current_node.movement_cost + length(neighbor.pos - current_node.pos);
+        } else {
+          continue;
+        }
       }
       addNeighbor(open, neighbor);
     }
@@ -422,7 +436,7 @@ void makeIdleTask(State& world_data, Task& task, Entity& worker) {
 }
 
 bool isOccupied(const State& world_data, const vec2& pos) {
-  auto grid_location = pos - mod(pos, (float) GRID_SQUARE_SIZE);
+  auto grid_location = posToGridPos(pos);
   return find(begin(world_data.occupied_locations),
               end(world_data.occupied_locations),
               grid_location) 
@@ -490,7 +504,7 @@ bool updateLogic(float dt, State& world_data) {
   // update brush position
   if(world_data.brush_id != 0){
     auto& ent = world_data.entities[world_data.brush_id];
-    ent.pos = world_data.mouse_pos - mod(world_data.mouse_pos, (float) GRID_SQUARE_SIZE);
+    ent.pos = posToGridPos(world_data.mouse_pos);
   }
 
   for(auto& worker_iter : world_data.workers){
@@ -515,6 +529,10 @@ bool updateLogic(float dt, State& world_data) {
 
       } break;
       case Task::Chore::BUILD_CHAIR: {
+        auto path = getPath(world_data, worker.pos, target);
+        for(const auto& p : path){
+          cout << p.x << "," << p.y << "\n";
+        }
         auto dist = distance(worker.pos, target);
         assert(!isnan(dist) && "invalid distance between worker and target");
         if(dist < ARRIVAL_RADIUS){
