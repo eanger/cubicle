@@ -12,17 +12,3 @@ To do:
 * Change blend for brush only when it's hovering over a location that's occupied
 * Make it so you can't build a chair plan over top of another chair plan
 
-
-Pathfinding
------------
-Invariants:
-    - The open list is ordered by the cumulative cost to reach that node
-Procedure:
-    - Add starting node to open list
-    - Pop an element E off the open list
-        - For each reachable neighbor N of E
-            - If N is the destination, we're done
-            - If N is in the open list, update it's movement cost as necessary
-            - Set the parent of N to E
-            - Add N to the open list
-            - Put E on the closed list

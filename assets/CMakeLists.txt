@@ -1,0 +1,6 @@
+configure_file(spritesheet.bmp spritesheet.bmp COPYONLY)
+configure_file(chair.bmp chair.bmp COPYONLY)
+configure_file(desk.bmp desk.bmp COPYONLY)
+configure_file(door.bmp door.bmp COPYONLY)
+configure_file(guy.bmp guy.bmp COPYONLY)
+configure_file(walls.bmp walls.bmp COPYONLY)
