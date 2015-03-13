@@ -1,9 +1,10 @@
 cmake_minimum_required (VERSION 2.8.4)
 
 project(cubicle)
+set(CMAKE_CXX_FLAGS "-std=c++11")
 
 add_subdirectory(assets)
-include_directories(.)
+include_directories(. tests)
 
 set(CUB_SRCS
     cubicle.cpp
@@ -18,6 +19,10 @@ set(PFIND_SRCS
     glm/geometric.hpp
     )
 
+set(TEST_SRCS
+    pathfinding.h
+    tests/test.cpp)
+
 add_library(pathfinding ${PFIND_SRCS})
 add_executable(cubicle ${CUB_SRCS})
 
@@ -29,4 +34,9 @@ include_directories(${SDL2_INCLUDE_DIR} ${SDL2TTF_INCLUDE_DIR} ${SDL2IMAGE_INCLU
 
 target_link_libraries(cubicle pathfinding ${SDL2_LIBRARY} ${SDL2TTFMAIN_LIBRARY} ${SDL2IMAGE_LIBRARY})
 
-set(CMAKE_CXX_FLAGS "-std=c++11")
+add_subdirectory(gtest)
+enable_testing()
+include_directories(${gtest_SOURCE_DIR}/include ${gtest_SOURCE_DIR})
+add_executable(run-tests ${TEST_SRCS})
+target_link_libraries(run-tests gtest gtest_main pathfinding)
+add_test(run-tests run-tests)
