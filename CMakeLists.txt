@@ -5,5 +5,5 @@ set(CMAKE_CXX_FLAGS "-std=c++11")
 
 add_subdirectory(src)
 add_subdirectory(assets)
-add_subdirectory(test)
 enable_testing()
+add_test(run-tests src/run-tests)
