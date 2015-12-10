@@ -11,7 +11,7 @@ inline std::string get_bin_path() {
 
 inline std::string get_asset_path(std::string name) {
   auto bin_path = get_bin_path();
-  return bin_path + "/assets/" + name;
+  return bin_path + "../assets/" + name;
 }
 
 inline std::string get_lib_path(std::string lib_name) {
